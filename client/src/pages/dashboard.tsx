@@ -71,11 +71,11 @@ export default function Dashboard() {
   });
 
   const availableProjectTypes = useMemo(() => {
-    return [...new Set(projects.map((p) => p.projectType))];
+    return Array.from(new Set(projects.map((p) => p.projectType)));
   }, [projects]);
 
   const availablePhases = useMemo(() => {
-    return [...new Set(lessons.map((l) => l.phase))];
+    return Array.from(new Set(lessons.map((l) => l.phase)));
   }, [lessons]);
 
   const filteredLessons = useMemo(() => {
