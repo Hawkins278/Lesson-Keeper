@@ -222,37 +222,39 @@ export default function UploadPage() {
         </Card>
       )}
 
-      <Card className="p-4">
-        <h3 className="font-semibold text-sm mb-2">Template Columns</h3>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-          {[
-            "ProjectType*",
-            "ProjectName*",
-            "ProjectCloseDate",
-            "ProjectManager",
-            "ProjectDescription",
-            "LessonType*",
-            "LessonName*",
-            "LessonEventDescription",
-            "KeyLearningOrAction",
-            "ProjectPhase*",
-            "LessonCategory*",
-            "LessonSubcategory*",
-          ].map((col) => (
-            <div key={col} className="text-xs font-mono text-muted-foreground">
-              {col.endsWith("*") ? (
-                <span>
-                  {col.slice(0, -1)} <span className="text-destructive">*</span>
+      <Card className="p-4 space-y-4">
+        <h3 className="font-semibold text-sm">Template Structure</h3>
+        <div className="space-y-3">
+          <div>
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1.5">Project Details (entered once)</p>
+            <div className="flex flex-wrap gap-2">
+              {["ProjectType*", "ProjectName*", "ProjectCloseDate", "ProjectManager", "ProjectDescription"].map((col) => (
+                <span key={col} className="text-xs font-mono px-2 py-0.5 rounded-md bg-muted">
+                  {col.endsWith("*") ? (
+                    <>{col.slice(0, -1)} <span className="text-destructive">*</span></>
+                  ) : col}
                 </span>
-              ) : (
-                col
-              )}
+              ))}
             </div>
-          ))}
+          </div>
+          <Separator />
+          <div>
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1.5">Lesson Rows (under each section)</p>
+            <div className="flex flex-wrap gap-2">
+              {["LessonName*", "LessonEventDescription", "KeyLearningOrAction", "ProjectPhase*", "LessonCategory*", "LessonSubcategory*"].map((col) => (
+                <span key={col} className="text-xs font-mono px-2 py-0.5 rounded-md bg-muted">
+                  {col.endsWith("*") ? (
+                    <>{col.slice(0, -1)} <span className="text-destructive">*</span></>
+                  ) : col}
+                </span>
+              ))}
+            </div>
+          </div>
         </div>
-        <p className="text-xs text-muted-foreground mt-2">
-          <span className="text-destructive">*</span> Required fields. LessonType must be "WentWell" or "CouldHaveGoneBetter".
-        </p>
+        <div className="text-xs text-muted-foreground space-y-1 pt-1">
+          <p><span className="text-destructive">*</span> Required fields.</p>
+          <p>The template has three sections: <strong>PROJECT DETAILS</strong> at the top (filled in once), then <strong>COULD HAVE GONE BETTER</strong> and <strong>WENT WELL</strong> sections, each with multiple lesson rows underneath.</p>
+        </div>
       </Card>
     </div>
   );
