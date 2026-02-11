@@ -1,0 +1,285 @@
+You’re essentially specifying a “lessons learned” knowledge base with import from Excel, SSO-secured access, scoring for riskier subcategories, and rich filtering/drill‑down views. Below is a concrete design you can hand to a dev (or use yourself) plus an example Excel template.
+
+1. Core data model
+Relational model (SQL) works well.
+
+Main entities
+User
+
+Id (GUID)
+
+DisplayName
+
+Email
+
+AuthProviderId / SubjectId (for SSO)
+
+CreatedAt, LastLoginAt
+
+Project
+
+Id
+
+ProjectType (e.g. “IT change”, “Construction”)
+
+Name
+
+CloseDate
+
+ProjectManager
+
+Description
+
+CreatedAt
+
+LessonCategory
+
+Id
+
+Name (e.g. “Governance”, “Planning”)
+
+Description
+
+LessonSubcategory
+
+Id
+
+CategoryId → LessonCategory
+
+Name (e.g. “Requirements clarity”)
+
+Description
+
+FirstRecordedDate (date of first lesson)
+
+CurrentScore (int) – maintained by the app
+
+LastScoreUpdatedAt (date)
+
+Lesson
+
+Id
+
+ProjectId → Project
+
+SubcategoryId → LessonSubcategory
+
+Phase (enum/string – e.g. “Initiation, Planning, Delivery, Close‑out”)
+
+Type (enum: “WentWell”, “CouldBeBetter”) – mirrors “WIN/ISSUE” patterns in common templates.
+
+Name
+
+EventDescription (what happened)
+
+KeyLearningOrAction (short summary/action)
+
+CreatedAt
+
+CreatedByUserId → User
+
+This structure lets you filter by project attributes, phase, category, and subcategory, and group by subcategory for the initial views.​
+
+2. Excel upload template
+You want a header block with project fields, then multiple lessons per project, with each lesson marked as “Went well” or “Could have gone better”.
+
+Use a single sheet with repeating project rows (simpler for import). Example columns:
+
+ProjectType
+
+ProjectName
+
+ProjectCloseDate
+
+ProjectManager
+
+ProjectDescription
+
+LessonType (values: WentWell / CouldHaveGoneBetter)
+
+LessonName
+
+LessonEventDescription
+
+KeyLearningOrAction
+
+ProjectPhase
+
+LessonCategory
+
+LessonSubcategory
+
+The app should:
+
+Validate required fields (ProjectType, ProjectName, LessonType, LessonName, ProjectPhase, LessonCategory, LessonSubcategory).
+
+Create project records as needed (e.g. composite key on ProjectName + CloseDate, or explicit project code if you add one).
+
+Upsert categories/subcategories (create missing ones, or optionally enforce a predefined list).
+
+On the upload page, expose:
+
+A “Download template” button that returns an .xlsx with exactly those headers in row 1.
+
+Validation feedback listing row/column errors before committing.
+
+3. Scoring logic for “could be better”
+For LessonSubcategory scores (only “CouldHaveGoneBetter” lessons affect scoring):
+
+When a subcategory is first seen (first lesson imported or created):
+
+Set FirstRecordedDate = today.
+
+Set CurrentScore = 1000.
+
+Set LastScoreUpdatedAt = today.
+
+Daily decay:
+
+EffectiveScore = CurrentScore - daysSinceLastUpdate.
+
+You can either:
+
+Recalculate lazily on read (compute and display EffectiveScore, and update CurrentScore/LastScoreUpdatedAt then), or
+
+Run a daily job that decrements CurrentScore by 1 for all subcategories where CurrentScore > 0.
+
+When a new CouldHaveGoneBetter lesson is added to a subcategory:
+
+Apply decay since LastScoreUpdatedAt (as above).
+
+Then increase CurrentScore by 200.
+
+Update LastScoreUpdatedAt = today.
+
+Initial “could be better” view:
+
+Group by Subcategory (with Category label).
+
+For each subcategory group:
+
+Show subcategory name, category, EffectiveScore, and number of lessons.
+
+Under each, list lessons by Name (clickable for drill‑down).
+
+Order groups by EffectiveScore descending (highest at the top).
+
+Filters:
+
+ProjectType (multi-select).
+
+Phase (multi-select).
+
+Category / Subcategory (multi-select).
+
+When filters are applied, only consider lessons that match, but keep scoring per subcategory global (or offer a “score within filtered set” toggle if you want to get fancy).
+
+4. “Went well” view
+Mirror the structure on a second tab/page, but without scoring:
+
+Tab 1: “Could have gone better”
+
+Tab 2: “Went well”
+
+For the Went well tab:
+
+Group under Subcategory (within Category).
+
+Within each subcategory, sort by newest first (Lesson.CreatedAt desc).
+
+All items listed (no scoring).
+
+Filters:
+
+ProjectType.
+
+Phase.
+
+(Optionally Category/Subcategory as well for consistency.)
+
+Both tabs should support:
+
+Quick search by LessonName text.
+
+Collapse/expand per Category and Subcategory.
+
+5. Filtering and drill‑down UX
+UX guidance from filter design best practices suggests keeping filters visible and prioritizing the most important ones near the top.
+
+On each tab:
+
+Left or top filter bar with:
+
+ProjectType dropdown (multi-select).
+
+Phase dropdown.
+
+Category/Subcategory dropdowns (dependent – subcategory options filtered by selected category).
+
+“Clear all filters” button near filter chips.
+
+Results area:
+
+Category heading.
+
+Under each, subcategory cards/accordions with the lessons list.
+
+Drill‑down:
+
+Clicking a lesson opens a side panel or modal showing:
+
+Project info (type, name, manager, close date).
+
+Phase.
+
+Category/Subcategory.
+
+Type (Went well/Could have gone better).
+
+EventDescription.
+
+KeyLearningOrAction.
+
+This faceted approach maps directly to typical “lessons register” structures used in project templates.​
+
+6. Auth and SSO integration
+Given you want “simple login credentials and SSO integration API”:
+
+Implement local accounts (email + password) plus one SSO provider (e.g. Azure AD, Entra ID, Okta, or an open-source IdP).
+
+Use a modern federation protocol such as OpenID Connect or SAML for SSO.
+
+Pattern:
+
+Identity Provider (IdP): central auth (e.g. Azure AD).
+
+App: OIDC client:
+
+Redirects to IdP for sign‑in.
+
+Receives ID token + access token.
+
+Extracts user email/name, maps to local User row (auto‑provision on first login).
+
+Pair SSO with MFA at the IdP for better security.​
+
+Keep attribute mapping documented (email, displayName, unique subject id), as this simplifies troubleshooting.
+
+Provide:
+
+“Sign in with corporate account” (SSO button).
+
+“Sign in with email/password” for simple login (optionally restricted to admins or for break‑glass access).
+
+7. Recommended tech stack (example)
+Given your prior interest in Blazor/atomic design, a feasible stack:
+
+Frontend: Blazor Server or WASM, atomic component library for buttons, filters, cards.
+
+Backend: ASP.NET Core Web API with EF Core for data model.
+
+Auth: ASP.NET Core Identity + OpenID Connect integration with your IdP.
+
+Jobs: Background hosted service or scheduled task for daily score decay if you don’t do it lazily.
+
+Storage: SQL Server / PostgreSQL
