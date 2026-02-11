@@ -36,5 +36,17 @@ client/src/components/     - Sidebar, Filters, LessonDetailDialog, ThemeToggle
 - **LessonSubcategories**: name, categoryId, currentScore, lastScoreUpdatedAt, firstRecordedDate
 - **Lessons**: projectId, subcategoryId, phase, type (WentWell/CouldHaveGoneBetter), name, eventDescription, keyLearningOrAction
 
+## Excel Template Format
+- **Sheet 1 "Lessons Template"**: Structured layout with styled section headers (dark blue) and column headers (light blue)
+  - PROJECT DETAILS section: single row for ProjectType, ProjectName, ProjectCloseDate, ProjectManager, ProjectDescription
+  - COULD HAVE GONE BETTER section: multiple lesson rows (LessonName, LessonEventDescription, KeyLearningOrAction, ProjectPhase, LessonCategory, LessonSubcategory)
+  - WENT WELL section: same lesson columns, multiple rows
+  - Dropdown validation on ProjectType, ProjectPhase, LessonCategory, LessonSubcategory cells linked to Reference Data sheet
+- **Sheet 2 "Reference Data"**: Valid values for ProjectType, ProjectPhase, LessonCategory, LessonSubcategory. Users can add new values here. Template generated dynamically from current database values.
+- Upload parser validates lesson data against Reference Data sheet values when present
+- Template generation uses `exceljs` library for styling; upload parsing uses `xlsx` (SheetJS)
+
 ## Recent Changes
+- 2026-02-11: Added Reference Data sheet with dropdown validation and styled headers to Excel template
+- 2026-02-11: Restructured Excel template to single project entry + sectioned lessons
 - 2026-02-11: Initial MVP implementation with all core features

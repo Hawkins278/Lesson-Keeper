@@ -254,6 +254,7 @@ export default function UploadPage() {
         <div className="text-xs text-muted-foreground space-y-1 pt-1">
           <p><span className="text-destructive">*</span> Required fields.</p>
           <p>The template has three sections: <strong>PROJECT DETAILS</strong> at the top (filled in once), then <strong>COULD HAVE GONE BETTER</strong> and <strong>WENT WELL</strong> sections, each with multiple lesson rows underneath.</p>
+          <p>A second sheet called <strong>Reference Data</strong> contains valid values for Project Type, Project Phase, Lesson Category, and Lesson Subcategory. You can add new values there and they will be accepted during upload.</p>
         </div>
       </Card>
     </div>
