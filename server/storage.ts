@@ -3,10 +3,11 @@ import {
   type LessonCategory, type InsertLessonCategory,
   type LessonSubcategory, type InsertLessonSubcategory,
   type Lesson, type InsertLesson,
-  projects, lessonCategories, lessonSubcategories, lessons,
+  type ReferenceValue, type InsertReferenceValue,
+  projects, lessonCategories, lessonSubcategories, lessons, referenceValues,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, sql } from "drizzle-orm";
 
 export interface IStorage {
   getProjects(): Promise<Project[]>;
@@ -27,6 +28,14 @@ export interface IStorage {
   getLessons(): Promise<(Lesson & { project?: Project; category?: LessonCategory; subcategory?: LessonSubcategory })[]>;
   getLesson(id: number): Promise<Lesson | undefined>;
   createLesson(lesson: InsertLesson): Promise<Lesson>;
+
+  getReferenceValues(type: string): Promise<ReferenceValue[]>;
+  createReferenceValue(value: InsertReferenceValue): Promise<ReferenceValue>;
+  deleteReferenceValue(id: number): Promise<void>;
+  hasDependentLessonsForCategory(categoryId: number): Promise<boolean>;
+  hasDependentLessonsForSubcategory(subcategoryId: number): Promise<boolean>;
+  deleteCategory(id: number): Promise<void>;
+  deleteSubcategory(id: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -121,6 +130,43 @@ export class DatabaseStorage implements IStorage {
   async createLesson(lesson: InsertLesson): Promise<Lesson> {
     const [created] = await db.insert(lessons).values(lesson).returning();
     return created;
+  }
+
+  async getReferenceValues(type: string): Promise<ReferenceValue[]> {
+    return db.select().from(referenceValues).where(eq(referenceValues.type, type as any));
+  }
+
+  async createReferenceValue(value: InsertReferenceValue): Promise<ReferenceValue> {
+    const [created] = await db.insert(referenceValues).values(value).returning();
+    return created;
+  }
+
+  async deleteReferenceValue(id: number): Promise<void> {
+    await db.delete(referenceValues).where(eq(referenceValues.id, id));
+  }
+
+  async hasDependentLessonsForCategory(categoryId: number): Promise<boolean> {
+    const subs = await db.select().from(lessonSubcategories).where(eq(lessonSubcategories.categoryId, categoryId));
+    if (subs.length === 0) return false;
+    for (const sub of subs) {
+      const [result] = await db.select({ count: sql<number>`count(*)` }).from(lessons).where(eq(lessons.subcategoryId, sub.id));
+      if (Number(result.count) > 0) return true;
+    }
+    return false;
+  }
+
+  async hasDependentLessonsForSubcategory(subcategoryId: number): Promise<boolean> {
+    const [result] = await db.select({ count: sql<number>`count(*)` }).from(lessons).where(eq(lessons.subcategoryId, subcategoryId));
+    return Number(result.count) > 0;
+  }
+
+  async deleteCategory(id: number): Promise<void> {
+    await db.delete(lessonSubcategories).where(eq(lessonSubcategories.categoryId, id));
+    await db.delete(lessonCategories).where(eq(lessonCategories.id, id));
+  }
+
+  async deleteSubcategory(id: number): Promise<void> {
+    await db.delete(lessonSubcategories).where(eq(lessonSubcategories.id, id));
   }
 }
 

@@ -1,9 +1,27 @@
 import { storage } from "./storage";
 import { db } from "./db";
-import { lessons } from "@shared/schema";
+import { lessons, referenceValues } from "@shared/schema";
 import { sql } from "drizzle-orm";
 
+async function seedReferenceValues() {
+  const existing = await db.select({ count: sql<number>`count(*)` }).from(referenceValues);
+  if (Number(existing[0].count) > 0) return;
+
+  const projectTypes = ["IT Change", "Construction", "Business Change", "Infrastructure", "Software Development", "Organizational"];
+  const phases = ["Initiation", "Planning", "Delivery", "Close-out"];
+
+  for (const v of projectTypes) {
+    await storage.createReferenceValue({ type: "ProjectType", value: v });
+  }
+  for (const v of phases) {
+    await storage.createReferenceValue({ type: "ProjectPhase", value: v });
+  }
+  console.log("Seeded reference values: project types and phases");
+}
+
 export async function seedDatabase() {
+  await seedReferenceValues();
+
   const existingLessons = await db.select({ count: sql<number>`count(*)` }).from(lessons);
   if (Number(existingLessons[0].count) > 0) {
     return;

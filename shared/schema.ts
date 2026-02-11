@@ -62,3 +62,15 @@ export type Lesson = typeof lessons.$inferSelect;
 
 export const PHASES = ["Initiation", "Planning", "Delivery", "Close-out"] as const;
 export const PROJECT_TYPES = ["IT Change", "Construction", "Business Change", "Infrastructure", "Software Development", "Organizational"] as const;
+
+export const refValueTypeEnum = pgEnum("ref_value_type", ["ProjectType", "ProjectPhase"]);
+
+export const referenceValues = pgTable("reference_values", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  type: refValueTypeEnum("type").notNull(),
+  value: text("value").notNull(),
+});
+
+export const insertReferenceValueSchema = createInsertSchema(referenceValues).omit({ id: true });
+export type InsertReferenceValue = z.infer<typeof insertReferenceValueSchema>;
+export type ReferenceValue = typeof referenceValues.$inferSelect;

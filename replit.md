@@ -35,6 +35,7 @@ client/src/components/     - Sidebar, Filters, LessonDetailDialog, ThemeToggle
 - **LessonCategories**: name, description
 - **LessonSubcategories**: name, categoryId, currentScore, lastScoreUpdatedAt, firstRecordedDate
 - **Lessons**: projectId, subcategoryId, phase, type (WentWell/CouldHaveGoneBetter), name, eventDescription, keyLearningOrAction
+- **ReferenceValues**: type (ProjectType|ProjectPhase), value — stores configurable dropdown values for template generation
 
 ## Excel Template Format
 - **Sheet 1 "Lessons Template"**: Structured layout with styled section headers (dark blue) and column headers (light blue)
@@ -47,6 +48,8 @@ client/src/components/     - Sidebar, Filters, LessonDetailDialog, ThemeToggle
 - Template generation uses `exceljs` library for styling; upload parsing uses `xlsx` (SheetJS)
 
 ## Recent Changes
+- 2026-02-11: Added reference data management form on Upload page with add/remove for all four field types and confirm-to-download flow
+- 2026-02-11: Added ReferenceValues table for ProjectType and ProjectPhase with seeded defaults
 - 2026-02-11: Added Reference Data sheet with dropdown validation and styled headers to Excel template
 - 2026-02-11: Restructured Excel template to single project entry + sectioned lessons
 - 2026-02-11: Initial MVP implementation with all core features

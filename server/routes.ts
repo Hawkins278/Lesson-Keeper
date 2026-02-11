@@ -61,13 +61,107 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/reference-data", isAuthenticated, async (_req, res) => {
+    try {
+      const allCategories = await storage.getCategories();
+      const allSubcategories = await storage.getSubcategories();
+      const projectTypes = await storage.getReferenceValues("ProjectType");
+      const projectPhases = await storage.getReferenceValues("ProjectPhase");
+      res.json({
+        projectTypes: projectTypes.map((v) => ({ id: v.id, value: v.value })),
+        projectPhases: projectPhases.map((v) => ({ id: v.id, value: v.value })),
+        categories: allCategories.map((c) => ({ id: c.id, value: c.name })),
+        subcategories: allSubcategories.map((s) => ({ id: s.id, value: s.name, categoryId: s.categoryId })),
+      });
+    } catch (error) {
+      console.error("Error fetching reference data:", error);
+      res.status(500).json({ message: "Failed to fetch reference data" });
+    }
+  });
+
+  app.post("/api/reference-data/:type", isAuthenticated, async (req, res) => {
+    try {
+      const { type } = req.params;
+      const { value } = req.body;
+      if (!value || typeof value !== "string" || !value.trim()) {
+        return res.status(400).json({ message: "Value is required" });
+      }
+      const trimmed = value.trim();
+
+      if (type === "ProjectType" || type === "ProjectPhase") {
+        const existing = await storage.getReferenceValues(type);
+        if (existing.some((v) => v.value.toLowerCase() === trimmed.toLowerCase())) {
+          return res.status(409).json({ message: `"${trimmed}" already exists` });
+        }
+        const created = await storage.createReferenceValue({ type, value: trimmed });
+        return res.json({ id: created.id, value: created.value });
+      } else if (type === "LessonCategory") {
+        const existing = await storage.findCategoryByName(trimmed);
+        if (existing) {
+          return res.status(409).json({ message: `"${trimmed}" already exists` });
+        }
+        const created = await storage.createCategory({ name: trimmed, description: null });
+        return res.json({ id: created.id, value: created.name });
+      } else if (type === "LessonSubcategory") {
+        const { categoryId } = req.body;
+        if (!categoryId) {
+          return res.status(400).json({ message: "Category is required for subcategories" });
+        }
+        const existing = await storage.findSubcategoryByNameAndCategory(trimmed, Number(categoryId));
+        if (existing) {
+          return res.status(409).json({ message: `"${trimmed}" already exists in this category` });
+        }
+        const created = await storage.createSubcategory({ categoryId: Number(categoryId), name: trimmed, description: null });
+        return res.json({ id: created.id, value: created.name, categoryId: created.categoryId });
+      }
+      return res.status(400).json({ message: "Invalid type" });
+    } catch (error) {
+      console.error("Error creating reference value:", error);
+      res.status(500).json({ message: "Failed to create reference value" });
+    }
+  });
+
+  app.delete("/api/reference-data/:type/:id", isAuthenticated, async (req, res) => {
+    try {
+      const { type, id } = req.params;
+      const numId = Number(id);
+      if (type === "ProjectType" || type === "ProjectPhase") {
+        await storage.deleteReferenceValue(numId);
+      } else if (type === "LessonCategory") {
+        const hasLessons = await storage.hasDependentLessonsForCategory(numId);
+        if (hasLessons) {
+          return res.status(409).json({ message: "Cannot remove this category because it has lessons linked to it." });
+        }
+        await storage.deleteCategory(numId);
+      } else if (type === "LessonSubcategory") {
+        const hasLessons = await storage.hasDependentLessonsForSubcategory(numId);
+        if (hasLessons) {
+          return res.status(409).json({ message: "Cannot remove this subcategory because it has lessons linked to it." });
+        }
+        await storage.deleteSubcategory(numId);
+      } else {
+        return res.status(400).json({ message: "Invalid type" });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting reference value:", error);
+      res.status(500).json({ message: "Failed to delete reference value" });
+    }
+  });
+
   app.get("/api/template", isAuthenticated, async (_req, res) => {
     try {
       const allCategories = await storage.getCategories();
       const allSubcategories = await storage.getSubcategories();
 
-      const projectTypes = ["IT Change", "Construction", "Business Change", "Infrastructure", "Software Development", "Organizational"];
-      const phases = ["Initiation", "Planning", "Delivery", "Close-out"];
+      const ptValues = await storage.getReferenceValues("ProjectType");
+      const phValues = await storage.getReferenceValues("ProjectPhase");
+      const projectTypes = ptValues.length > 0
+        ? ptValues.map((v) => v.value)
+        : ["IT Change", "Construction", "Business Change", "Infrastructure", "Software Development", "Organizational"];
+      const phases = phValues.length > 0
+        ? phValues.map((v) => v.value)
+        : ["Initiation", "Planning", "Delivery", "Close-out"];
       const categoryNames = allCategories.length > 0
         ? allCategories.map((c) => c.name)
         : ["Governance", "Planning", "Execution", "Communication"];
