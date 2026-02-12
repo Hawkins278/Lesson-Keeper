@@ -4,10 +4,11 @@ import {
   type LessonSubcategory, type InsertLessonSubcategory,
   type Lesson, type InsertLesson,
   type ReferenceValue, type InsertReferenceValue,
-  projects, lessonCategories, lessonSubcategories, lessons, referenceValues,
+  type User, type UserRole,
+  projects, lessonCategories, lessonSubcategories, lessons, referenceValues, users,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, desc, sql } from "drizzle-orm";
+import { eq, and, desc, sql, ne, or, inArray } from "drizzle-orm";
 
 export interface IStorage {
   getProjects(): Promise<Project[]>;
@@ -36,6 +37,13 @@ export interface IStorage {
   hasDependentLessonsForSubcategory(subcategoryId: number): Promise<boolean>;
   deleteCategory(id: number): Promise<void>;
   deleteSubcategory(id: number): Promise<void>;
+
+  getUsersByRole(role: UserRole): Promise<User[]>;
+  getUsersByRoles(roles: UserRole[]): Promise<User[]>;
+  setUserRole(userId: string, role: UserRole): Promise<User | undefined>;
+  getUserById(userId: string): Promise<User | undefined>;
+  getUserByEmail(email: string): Promise<User | undefined>;
+  countUsersByRole(role: UserRole): Promise<number>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -167,6 +175,34 @@ export class DatabaseStorage implements IStorage {
 
   async deleteSubcategory(id: number): Promise<void> {
     await db.delete(lessonSubcategories).where(eq(lessonSubcategories.id, id));
+  }
+
+  async getUsersByRole(role: UserRole): Promise<User[]> {
+    return db.select().from(users).where(eq(users.role, role)).orderBy(users.email);
+  }
+
+  async getUsersByRoles(roles: UserRole[]): Promise<User[]> {
+    return db.select().from(users).where(inArray(users.role, roles)).orderBy(users.email);
+  }
+
+  async setUserRole(userId: string, role: UserRole): Promise<User | undefined> {
+    const [updated] = await db.update(users).set({ role, updatedAt: new Date() }).where(eq(users.id, userId)).returning();
+    return updated;
+  }
+
+  async getUserById(userId: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, userId));
+    return user;
+  }
+
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.email, email));
+    return user;
+  }
+
+  async countUsersByRole(role: UserRole): Promise<number> {
+    const [result] = await db.select({ count: sql<number>`count(*)` }).from(users).where(eq(users.role, role));
+    return Number(result.count);
   }
 }
 

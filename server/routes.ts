@@ -1,12 +1,35 @@
-import type { Express } from "express";
+import type { Express, RequestHandler } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 import multer from "multer";
 import * as XLSX from "xlsx";
 import ExcelJS from "exceljs";
+import type { UserRole } from "@shared/models/auth";
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+
+const isAdmin: RequestHandler = async (req: any, res, next) => {
+  const userId = req.user?.claims?.sub;
+  if (!userId) return res.status(401).json({ message: "Unauthorized" });
+  const user = await storage.getUserById(userId);
+  if (!user || (user.role !== "admin" && user.role !== "superadmin")) {
+    return res.status(403).json({ message: "Forbidden: admin access required" });
+  }
+  (req as any).dbUser = user;
+  next();
+};
+
+const isSuperadmin: RequestHandler = async (req: any, res, next) => {
+  const userId = req.user?.claims?.sub;
+  if (!userId) return res.status(401).json({ message: "Unauthorized" });
+  const user = await storage.getUserById(userId);
+  if (!user || user.role !== "superadmin") {
+    return res.status(403).json({ message: "Forbidden: superadmin access required" });
+  }
+  (req as any).dbUser = user;
+  next();
+};
 
 interface ValidationError {
   row: number;
@@ -79,7 +102,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/reference-data/:type", isAuthenticated, async (req, res) => {
+  app.post("/api/reference-data/:type", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
       const { type } = req.params;
       const { value } = req.body;
@@ -121,7 +144,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/reference-data/:type/:id", isAuthenticated, async (req, res) => {
+  app.delete("/api/reference-data/:type/:id", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
       const { type, id } = req.params;
       const numId = Number(id);
@@ -545,6 +568,99 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Upload error:", error);
       res.status(500).json({ message: "Failed to process upload" });
+    }
+  });
+
+  app.get("/api/admin/users", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const admins = await storage.getUsersByRole("admin");
+      const superadmins = await storage.getUsersByRole("superadmin");
+      res.json({ admins, superadmins });
+    } catch (error) {
+      console.error("Error fetching admin users:", error);
+      res.status(500).json({ message: "Failed to fetch admin users" });
+    }
+  });
+
+  app.post("/api/admin/promote", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const { email, role } = req.body;
+      if (!email || !role) return res.status(400).json({ message: "Email and role are required" });
+      if (role !== "admin" && role !== "user") return res.status(400).json({ message: "Can only set admin or user role" });
+
+      const targetUser = await storage.getUserByEmail(email);
+      if (!targetUser) return res.status(404).json({ message: "No user found with that email. They must log in at least once first." });
+
+      if (targetUser.role === "superadmin") {
+        return res.status(403).json({ message: "Cannot change a superadministrator's role" });
+      }
+
+      const updated = await storage.setUserRole(targetUser.id, role as UserRole);
+      res.json(updated);
+    } catch (error) {
+      console.error("Error promoting user:", error);
+      res.status(500).json({ message: "Failed to update user role" });
+    }
+  });
+
+  app.post("/api/admin/superadmin", isAuthenticated, isSuperadmin, async (req: any, res) => {
+    try {
+      const { email } = req.body;
+      if (!email) return res.status(400).json({ message: "Email is required" });
+
+      const targetUser = await storage.getUserByEmail(email);
+      if (!targetUser) return res.status(404).json({ message: "No user found with that email. They must log in at least once first." });
+
+      if (targetUser.role === "superadmin") {
+        return res.status(409).json({ message: "User is already a superadministrator" });
+      }
+
+      const updated = await storage.setUserRole(targetUser.id, "superadmin");
+      res.json(updated);
+    } catch (error) {
+      console.error("Error adding superadmin:", error);
+      res.status(500).json({ message: "Failed to add superadministrator" });
+    }
+  });
+
+  app.delete("/api/admin/superadmin/:userId", isAuthenticated, isSuperadmin, async (req: any, res) => {
+    try {
+      const { userId } = req.params;
+      const targetUser = await storage.getUserById(userId);
+      if (!targetUser || targetUser.role !== "superadmin") {
+        return res.status(404).json({ message: "Superadministrator not found" });
+      }
+
+      const superadminCount = await storage.countUsersByRole("superadmin");
+      if (superadminCount <= 2) {
+        return res.status(400).json({ message: "Cannot remove superadministrator. There must always be at least 2 superadministrators." });
+      }
+
+      const updated = await storage.setUserRole(userId, "user");
+      res.json(updated);
+    } catch (error) {
+      console.error("Error removing superadmin:", error);
+      res.status(500).json({ message: "Failed to remove superadministrator" });
+    }
+  });
+
+  app.delete("/api/admin/demote/:userId", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const { userId } = req.params;
+      const targetUser = await storage.getUserById(userId);
+      if (!targetUser) return res.status(404).json({ message: "User not found" });
+      if (targetUser.role === "superadmin") {
+        return res.status(403).json({ message: "Cannot demote a superadministrator from admin panel" });
+      }
+      if (targetUser.role !== "admin") {
+        return res.status(400).json({ message: "User is not an administrator" });
+      }
+
+      const updated = await storage.setUserRole(userId, "user");
+      res.json(updated);
+    } catch (error) {
+      console.error("Error demoting admin:", error);
+      res.status(500).json({ message: "Failed to demote administrator" });
     }
   });
 

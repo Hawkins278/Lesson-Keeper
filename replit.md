@@ -1,7 +1,7 @@
-# LessonsDB - Lessons Learned Knowledge Base
+# LessonKeeper - Lessons Learned Knowledge Base
 
 ## Overview
-A full-stack web application for capturing, organizing, and learning from project experiences. Features Excel import, risk scoring for problem areas, and rich filtering/drill-down views.
+A full-stack web application for capturing, organizing, and learning from project experiences. Features Excel import, risk scoring for problem areas, and rich filtering/drill-down views. Branded as "LessonKeeper — a Hawkins-Digital product".
 
 ## Architecture
 - **Frontend**: React + TypeScript with Vite, Tailwind CSS, Shadcn UI components
@@ -16,40 +16,57 @@ A full-stack web application for capturing, organizing, and learning from projec
 - Collapsible category/subcategory groupings
 - Lesson detail drill-down dialog
 - Scoring system: subcategories start at 1000 when first "Could Be Better" lesson is recorded, decay by 1 point per day, boost by 200 for each new issue
+- Role-based access control: User, Administrator, Superadministrator
+- Admin page for managing reference data and user roles
+
+## Role System
+- **User**: Default role. Can view dashboard, upload lessons, browse projects.
+- **Administrator**: Can manage reference data (Project Types, Phases, Categories, Subcategories), manage other admin accounts. Cannot edit superadmin list.
+- **Superadministrator**: Full access. Can manage superadmin accounts. Minimum 2 superadmins required at all times. Each must have email + ID. Superadmins do not appear in admin list.
 
 ## Project Structure
 ```
 shared/schema.ts          - Drizzle schema for all entities
-shared/models/auth.ts     - Auth-related schema (users, sessions)
+shared/models/auth.ts     - Auth-related schema (users with role, sessions)
 server/db.ts              - Database connection
 server/storage.ts         - Data access layer (IStorage interface)
-server/routes.ts          - Express API routes
+server/routes.ts          - Express API routes (includes admin middleware)
 server/seed.ts            - Seed data for demo
-client/src/App.tsx         - Main app with auth routing
-client/src/pages/          - Landing, Dashboard, Upload, Projects pages
+client/src/App.tsx         - Main app with auth routing and footer
+client/src/pages/          - Landing, Dashboard, Upload, Projects, Admin pages
 client/src/components/     - Sidebar, Filters, LessonDetailDialog, ThemeToggle
 ```
 
 ## Data Model
+- **Users**: id, email, firstName, lastName, profileImageUrl, role (user|admin|superadmin)
 - **Projects**: projectType, name, closeDate, projectManager, description
 - **LessonCategories**: name, description
 - **LessonSubcategories**: name, categoryId, currentScore, lastScoreUpdatedAt, firstRecordedDate
 - **Lessons**: projectId, subcategoryId, phase, type (WentWell/CouldHaveGoneBetter), name, eventDescription, keyLearningOrAction
 - **ReferenceValues**: type (ProjectType|ProjectPhase), value — stores configurable dropdown values for template generation
 
+## Admin API Endpoints
+- GET /api/admin/users — list admins and superadmins (requires admin)
+- POST /api/admin/promote — add/change admin by email (requires admin)
+- DELETE /api/admin/demote/:userId — demote admin to user (requires admin)
+- POST /api/admin/superadmin — add superadmin by email (requires superadmin)
+- DELETE /api/admin/superadmin/:userId — remove superadmin (requires superadmin, min 2 enforced)
+- POST/DELETE /api/reference-data/:type — manage reference data (requires admin)
+
 ## Excel Template Format
 - **Sheet 1 "Lessons Template"**: Structured layout with styled section headers (dark blue) and column headers (light blue)
   - PROJECT DETAILS section: single row for ProjectType, ProjectName, ProjectCloseDate, ProjectManager, ProjectDescription
-  - COULD HAVE GONE BETTER section: multiple lesson rows (LessonName, LessonEventDescription, KeyLearningOrAction, ProjectPhase, LessonCategory, LessonSubcategory)
+  - COULD HAVE GONE BETTER section: multiple lesson rows
   - WENT WELL section: same lesson columns, multiple rows
   - Dropdown validation on ProjectType, ProjectPhase, LessonCategory, LessonSubcategory cells linked to Reference Data sheet
-- **Sheet 2 "Reference Data"**: Valid values for ProjectType, ProjectPhase, LessonCategory, LessonSubcategory. Users can add new values here. Template generated dynamically from current database values.
-- Upload parser validates lesson data against Reference Data sheet values when present
+- **Sheet 2 "Reference Data"**: Valid values for ProjectType, ProjectPhase, LessonCategory, LessonSubcategory
 - Template generation uses `exceljs` library for styling; upload parsing uses `xlsx` (SheetJS)
 
 ## Recent Changes
-- 2026-02-11: Added reference data management form on Upload page with add/remove for all four field types and confirm-to-download flow
+- 2026-02-12: Added role-based access control (user/admin/superadmin) with admin page
+- 2026-02-12: Moved reference data management from Upload page to Admin page
+- 2026-02-12: Added admin/superadmin user management with authorization middleware
+- 2026-02-12: Updated branding to LessonKeeper with Hawkins-Digital logo
+- 2026-02-11: Added reference data management form with add/remove for all four field types
 - 2026-02-11: Added ReferenceValues table for ProjectType and ProjectPhase with seeded defaults
-- 2026-02-11: Added Reference Data sheet with dropdown validation and styled headers to Excel template
-- 2026-02-11: Restructured Excel template to single project entry + sectioned lessons
 - 2026-02-11: Initial MVP implementation with all core features

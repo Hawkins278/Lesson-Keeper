@@ -13,10 +13,17 @@ import LandingPage from "@/pages/landing";
 import Dashboard from "@/pages/dashboard";
 import UploadPage from "@/pages/upload";
 import ProjectsPage from "@/pages/projects";
+import AdminPage from "@/pages/admin";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import hawkinsLogo from "@assets/Hawkins-Digital_1770883345237.jpg";
+
+const ROLE_LABELS: Record<string, string> = {
+  superadmin: "Superadministrator",
+  admin: "Administrator",
+  user: "User",
+};
 
 function AuthenticatedApp() {
   const { user, isLoading, isAuthenticated } = useAuth();
@@ -41,6 +48,9 @@ function AuthenticatedApp() {
     "--sidebar-width-icon": "3rem",
   };
 
+  const roleLabel = ROLE_LABELS[user!.role || "user"] || "User";
+  const initials = `${(user!.firstName || "")[0] || ""}${(user!.lastName || "")[0] || ""}`.toUpperCase() || "U";
+
   return (
     <SidebarProvider style={style as React.CSSProperties}>
       <div className="flex h-screen w-full">
@@ -55,6 +65,7 @@ function AuthenticatedApp() {
               <Route path="/" component={Dashboard} />
               <Route path="/upload" component={UploadPage} />
               <Route path="/projects" component={ProjectsPage} />
+              <Route path="/admin" component={AdminPage} />
               <Route component={NotFound} />
             </Switch>
           </main>
@@ -70,13 +81,11 @@ function AuthenticatedApp() {
               <div className="flex items-center gap-3">
                 <div className="text-right">
                   <span className="block text-xs" data-testid="text-footer-logged-in">Logged in as {user!.email || `${user!.firstName} ${user!.lastName}`}</span>
-                  <Badge variant="secondary" className="text-xs mt-0.5" data-testid="badge-footer-role">User</Badge>
+                  <Badge variant="secondary" className="text-xs mt-0.5 no-default-active-elevate" data-testid="badge-footer-role">{roleLabel}</Badge>
                 </div>
                 <Avatar className="h-8 w-8" data-testid="avatar-footer-user">
                   <AvatarImage src={user!.profileImageUrl || undefined} />
-                  <AvatarFallback className="text-xs">
-                    {`${(user!.firstName || "")[0] || ""}${(user!.lastName || "")[0] || ""}`.toUpperCase() || "U"}
-                  </AvatarFallback>
+                  <AvatarFallback className="text-xs">{initials}</AvatarFallback>
                 </Avatar>
               </div>
             </div>

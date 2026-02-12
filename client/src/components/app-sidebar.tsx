@@ -1,5 +1,5 @@
 import { useLocation, Link } from "wouter";
-import { BookOpen, Upload, LayoutDashboard, LogOut, FolderOpen } from "lucide-react";
+import { BookOpen, Upload, LayoutDashboard, LogOut, FolderOpen, Settings } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -22,16 +22,21 @@ const navItems = [
   { title: "Upload Lessons", url: "/upload", icon: Upload },
 ];
 
+const adminNavItem = { title: "Administration", url: "/admin", icon: Settings };
+
 interface AppSidebarProps {
   user: User | null;
 }
 
 export function AppSidebar({ user }: AppSidebarProps) {
   const [location] = useLocation();
+  const isAdminUser = user?.role === "admin" || user?.role === "superadmin";
 
   const initials = user
     ? `${(user.firstName || "")[0] || ""}${(user.lastName || "")[0] || ""}`.toUpperCase() || "U"
     : "U";
+
+  const allNavItems = isAdminUser ? [...navItems, adminNavItem] : navItems;
 
   return (
     <Sidebar>
@@ -48,7 +53,7 @@ export function AppSidebar({ user }: AppSidebarProps) {
           <SidebarGroupLabel>Navigation</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {navItems.map((item) => (
+              {allNavItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton
                     asChild
