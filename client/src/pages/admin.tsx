@@ -133,7 +133,18 @@ function ReferenceFieldSection({
 }
 
 function UserCard({ user, onRemove, canRemove, roleLabel }: { user: User; onRemove?: () => void; canRemove: boolean; roleLabel: string }) {
+  const [confirming, setConfirming] = useState(false);
   const initials = `${(user.firstName || "")[0] || ""}${(user.lastName || "")[0] || ""}`.toUpperCase() || "U";
+
+  const handleRemoveClick = () => {
+    if (confirming) {
+      onRemove?.();
+      setConfirming(false);
+    } else {
+      setConfirming(true);
+    }
+  };
+
   return (
     <div className="flex items-center justify-between gap-3 py-2">
       <div className="flex items-center gap-3 min-w-0">
@@ -154,14 +165,26 @@ function UserCard({ user, onRemove, canRemove, roleLabel }: { user: User; onRemo
         </Badge>
       </div>
       {canRemove && onRemove && (
-        <Button
-          size="icon"
-          variant="ghost"
-          onClick={onRemove}
-          data-testid={`button-remove-admin-${user.id}`}
-        >
-          <X className="w-4 h-4" />
-        </Button>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {confirming && (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setConfirming(false)}
+              data-testid={`button-cancel-remove-${user.id}`}
+            >
+              Cancel
+            </Button>
+          )}
+          <Button
+            size="sm"
+            variant={confirming ? "destructive" : "outline"}
+            onClick={handleRemoveClick}
+            data-testid={`button-remove-admin-${user.id}`}
+          >
+            {confirming ? "Confirm Demote" : "Demote to User"}
+          </Button>
+        </div>
       )}
     </div>
   );
