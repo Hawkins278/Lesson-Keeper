@@ -48,7 +48,7 @@ function AuthenticatedApp() {
         <div className="flex flex-col flex-1 min-w-0">
           <header className="sticky top-0 z-50 flex items-center justify-between gap-4 px-3 py-1.5 border-b bg-background/80 backdrop-blur-md">
             <SidebarTrigger data-testid="button-sidebar-toggle" />
-            <span className="text-2xl tracking-tight" style={{ fontFamily: '"Boucherie Block W05 Bold", serif' }} data-testid="text-header-logo">LessonKeeper</span>
+            <span className="text-5xl tracking-tight" style={{ fontFamily: '"Boucherie Block W05 Bold", serif' }} data-testid="text-header-logo">LessonKeeper</span>
             <div className="flex items-center gap-2">
               <img src={citbLogo} alt="CITB" className="h-[108px] w-[108px] rounded-md object-contain" data-testid="img-citb-logo" />
               <ThemeToggle />
