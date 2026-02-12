@@ -50,7 +50,7 @@ function AuthenticatedApp() {
             <SidebarTrigger data-testid="button-sidebar-toggle" />
             <span className="text-2xl tracking-tight" style={{ fontFamily: '"Boucherie Block W05 Bold", serif' }} data-testid="text-header-logo">LessonKeeper</span>
             <div className="flex items-center gap-2">
-              <img src={citbLogo} alt="CITB" className="h-9 w-9 rounded-md object-contain" data-testid="img-citb-logo" />
+              <img src={citbLogo} alt="CITB" className="h-[108px] w-[108px] rounded-md object-contain" data-testid="img-citb-logo" />
               <ThemeToggle />
             </div>
           </header>
