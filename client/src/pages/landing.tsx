@@ -13,7 +13,7 @@ export default function LandingPage() {
             <div className="w-8 h-8 rounded-md bg-primary flex items-center justify-center">
               <BookOpen className="w-4 h-4 text-primary-foreground" />
             </div>
-            <span className="font-semibold text-lg tracking-tight" data-testid="text-app-name">LessonKeeper</span>
+            <span className="text-[1.7rem] leading-none tracking-tight" style={{ fontFamily: '"Boucherie Block W05 Bold", serif' }} data-testid="text-app-name">LessonKeeper</span>
           </div>
           <div className="flex items-center gap-2">
             <ThemeToggle />
@@ -137,7 +137,7 @@ export default function LandingPage() {
           <div className="flex items-center gap-3">
             <img src={hawkinsLogo} alt="Hawkins-Digital" className="h-10 w-10 rounded-md object-cover" data-testid="img-hawkins-logo" />
             <div>
-              <span className="block">LessonKeeper &copy; {new Date().getFullYear()}</span>
+              <span className="block" style={{ fontFamily: '"Boucherie Block W05 Bold", serif' }}>LessonKeeper &copy; {new Date().getFullYear()}</span>
               <span className="block text-xs">a Hawkins-Digital product</span>
             </div>
           </div>

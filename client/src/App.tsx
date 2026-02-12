@@ -74,7 +74,7 @@ function AuthenticatedApp() {
               <div className="flex items-center gap-3">
                 <img src={hawkinsLogo} alt="Hawkins-Digital" className="h-8 w-8 rounded-md object-cover" data-testid="img-footer-logo" />
                 <div>
-                  <span className="block text-xs font-medium">LessonKeeper</span>
+                  <span className="block text-sm" style={{ fontFamily: '"Boucherie Block W05 Bold", serif' }}>LessonKeeper</span>
                   <span className="block text-xs">a Hawkins-Digital product</span>
                 </div>
               </div>
