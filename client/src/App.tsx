@@ -15,15 +15,8 @@ import UploadPage from "@/pages/upload";
 import ProjectsPage from "@/pages/projects";
 import AdminPage from "@/pages/admin";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
 import hawkinsLogo from "@assets/Hawkins-Digital_1770883345237.jpg";
-
-const ROLE_LABELS: Record<string, string> = {
-  superadmin: "Superadministrator",
-  admin: "Administrator",
-  user: "User",
-};
+import citbLogo from "@assets/citb-logo.png";
 
 function AuthenticatedApp() {
   const { user, isLoading, isAuthenticated } = useAuth();
@@ -48,17 +41,18 @@ function AuthenticatedApp() {
     "--sidebar-width-icon": "3rem",
   };
 
-  const roleLabel = ROLE_LABELS[user!.role || "user"] || "User";
-  const initials = `${(user!.firstName || "")[0] || ""}${(user!.lastName || "")[0] || ""}`.toUpperCase() || "U";
-
   return (
     <SidebarProvider style={style as React.CSSProperties}>
       <div className="flex h-screen w-full">
         <AppSidebar user={user!} />
         <div className="flex flex-col flex-1 min-w-0">
-          <header className="sticky top-0 z-50 flex items-center justify-between gap-4 p-3 border-b bg-background/80 backdrop-blur-md">
+          <header className="sticky top-0 z-50 flex items-center justify-between gap-4 px-3 py-1.5 border-b bg-background/80 backdrop-blur-md">
             <SidebarTrigger data-testid="button-sidebar-toggle" />
-            <ThemeToggle />
+            <span className="text-2xl tracking-tight" style={{ fontFamily: '"Boucherie Block W05 Bold", serif' }} data-testid="text-header-logo">LessonKeeper</span>
+            <div className="flex items-center gap-2">
+              <img src={citbLogo} alt="CITB" className="h-9 w-9 rounded-md object-contain" data-testid="img-citb-logo" />
+              <ThemeToggle />
+            </div>
           </header>
           <main className="flex-1 overflow-y-auto">
             <Switch>
@@ -70,24 +64,15 @@ function AuthenticatedApp() {
             </Switch>
           </main>
           <footer className="border-t bg-background">
-            <div className="px-4 py-3 flex flex-wrap items-center justify-between gap-4 text-sm text-muted-foreground">
-              <div className="flex items-center gap-3">
-                <img src={hawkinsLogo} alt="Hawkins-Digital" className="h-8 w-8 rounded-md object-cover" data-testid="img-footer-logo" />
-                <div>
-                  <span className="block text-sm" style={{ fontFamily: '"Boucherie Block W05 Bold", serif' }}>LessonKeeper</span>
-                  <span className="block text-xs">a Hawkins-Digital product</span>
-                </div>
+            <div className="px-4 py-1.5 flex flex-wrap items-center justify-between gap-4 text-sm text-muted-foreground">
+              <img src={hawkinsLogo} alt="Hawkins-Digital" className="h-[52px] w-[52px] rounded-md object-cover" data-testid="img-footer-logo" />
+              <div className="text-center text-xs">
+                <span style={{ fontFamily: '"Boucherie Block W05 Bold", serif' }}>LessonKeeper</span>
+                <span className="align-super text-[0.5rem]">TM</span>
+                <span className="mx-1.5">·</span>
+                <span>Copyright &copy; 2026 Hawkins-Digital</span>
               </div>
-              <div className="flex items-center gap-3">
-                <div className="text-right">
-                  <span className="block text-xs" data-testid="text-footer-logged-in">Logged in as {user!.email || `${user!.firstName} ${user!.lastName}`}</span>
-                  <Badge variant="secondary" className="text-xs mt-0.5 no-default-active-elevate" data-testid="badge-footer-role">{roleLabel}</Badge>
-                </div>
-                <Avatar className="h-8 w-8" data-testid="avatar-footer-user">
-                  <AvatarImage src={user!.profileImageUrl || undefined} />
-                  <AvatarFallback className="text-xs">{initials}</AvatarFallback>
-                </Avatar>
-              </div>
+              <div className="w-[52px]" />
             </div>
           </footer>
         </div>

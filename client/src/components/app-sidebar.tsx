@@ -1,5 +1,5 @@
 import { useLocation, Link } from "wouter";
-import { BookOpen, Upload, LayoutDashboard, LogOut, FolderOpen, Settings } from "lucide-react";
+import { Upload, LayoutDashboard, LogOut, FolderOpen, Settings } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -13,8 +13,15 @@ import {
   SidebarHeader,
 } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { User } from "@shared/models/auth";
+
+const ROLE_LABELS: Record<string, string> = {
+  superadmin: "Superadministrator",
+  admin: "Administrator",
+  user: "User",
+};
 
 const navItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
@@ -36,21 +43,16 @@ export function AppSidebar({ user }: AppSidebarProps) {
     ? `${(user.firstName || "")[0] || ""}${(user.lastName || "")[0] || ""}`.toUpperCase() || "U"
     : "U";
 
+  const roleLabel = ROLE_LABELS[user?.role || "user"] || "User";
   const allNavItems = isAdminUser ? [...navItems, adminNavItem] : navItems;
 
   return (
     <Sidebar>
       <SidebarHeader className="p-4">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-md bg-primary flex items-center justify-center flex-shrink-0">
-            <BookOpen className="w-4 h-4 text-primary-foreground" />
-          </div>
-          <span className="text-2xl tracking-tight" style={{ fontFamily: '"Boucherie Block W05 Bold", serif' }} data-testid="text-sidebar-logo">LessonKeeper</span>
-        </div>
+        <SidebarGroupLabel>Navigation</SidebarGroupLabel>
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>Navigation</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {allNavItems.map((item) => (
@@ -83,6 +85,7 @@ export function AppSidebar({ user }: AppSidebarProps) {
             <p className="text-xs text-muted-foreground truncate" data-testid="text-user-email">
               {user?.email}
             </p>
+            <Badge variant="secondary" className="text-xs mt-1 no-default-active-elevate" data-testid="badge-sidebar-role">{roleLabel}</Badge>
           </div>
         </div>
         <Button variant="ghost" size="sm" className="w-full justify-start" asChild data-testid="button-logout">
