@@ -16,7 +16,7 @@ import ProjectsPage from "@/pages/projects";
 import AdminPage from "@/pages/admin";
 import { Skeleton } from "@/components/ui/skeleton";
 import hawkinsLogo from "@assets/Hawkins-Digital_1770883345237.jpg";
-import citbLogo from "@assets/citb-logo.png";
+import citbLogo from "@assets/citb_logo_1770915007635.png";
 
 function AuthenticatedApp() {
   const { user, isLoading, isAuthenticated } = useAuth();
@@ -65,14 +65,16 @@ function AuthenticatedApp() {
           </main>
           <footer className="border-t bg-background">
             <div className="px-4 py-1.5 flex flex-wrap items-center justify-between gap-4 text-sm text-muted-foreground">
-              <img src={hawkinsLogo} alt="Hawkins-Digital" className="h-[52px] w-[52px] rounded-md object-cover" data-testid="img-footer-logo" />
-              <div className="text-center text-xs">
+              <div className="flex items-center gap-3">
+                <img src={hawkinsLogo} alt="Hawkins-Digital" className="h-[52px] w-[52px] rounded-md object-cover" data-testid="img-footer-logo" />
+                <span className="text-xs text-muted-foreground">A Hawkins-Digital product</span>
+              </div>
+              <div className="text-xs">
                 <span style={{ fontFamily: '"Boucherie Block W05 Bold", serif' }}>LessonKeeper</span>
                 <span className="align-super text-[0.5rem]">TM</span>
                 <span className="mx-1.5">·</span>
-                <span>Copyright &copy; 2026 Hawkins-Digital</span>
+                <span>Copyright &copy; 2026</span>
               </div>
-              <div className="w-[52px]" />
             </div>
           </footer>
         </div>

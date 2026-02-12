@@ -58,7 +58,6 @@ export default function Dashboard() {
     search: "",
   });
   const [selectedLesson, setSelectedLesson] = useState<LessonWithRelations | null>(null);
-  const [expandedCategories, setExpandedCategories] = useState<Set<number>>(new Set());
   const [expandedSubcategories, setExpandedSubcategories] = useState<Set<number>>(new Set());
 
   const { data: lessons = [], isLoading: lessonsLoading } = useQuery<LessonWithRelations[]>({
@@ -106,61 +105,41 @@ export default function Dashboard() {
     });
   }, [lessons, filters, projects, subcategories]);
 
-  const couldBeBetterGroups = useMemo(() => {
-    const cbbLessons = filteredLessons.filter((l) => l.type === "CouldHaveGoneBetter");
-    const groups: Map<number, SubcategoryGroup> = new Map();
+  const buildGroups = useMemo(() => {
+    const buildForType = (type: "CouldHaveGoneBetter" | "WentWell"): SubcategoryGroup[] => {
+      const typedLessons = filteredLessons.filter((l) => l.type === type);
+      const groups: Map<number, SubcategoryGroup> = new Map();
 
-    cbbLessons.forEach((lesson) => {
-      const sub = lesson.subcategory || subcategories.find((s) => s.id === lesson.subcategoryId);
-      const cat = sub ? (lesson.category || categories.find((c) => c.id === sub.categoryId)) : undefined;
-      if (!sub || !cat) return;
+      typedLessons.forEach((lesson) => {
+        const sub = lesson.subcategory || subcategories.find((s) => s.id === lesson.subcategoryId);
+        const cat = sub ? (lesson.category || categories.find((c) => c.id === sub.categoryId)) : undefined;
+        if (!sub || !cat) return;
 
-      if (!groups.has(sub.id)) {
-        const now = new Date();
-        const lastUpdate = sub.lastScoreUpdatedAt ? new Date(sub.lastScoreUpdatedAt) : now;
-        const daysSince = Math.floor((now.getTime() - lastUpdate.getTime()) / (1000 * 60 * 60 * 24));
-        const effectiveScore = Math.max(0, (sub.currentScore || 0) - daysSince);
+        if (!groups.has(sub.id)) {
+          const now = new Date();
+          const lastUpdate = sub.lastScoreUpdatedAt ? new Date(sub.lastScoreUpdatedAt) : now;
+          const daysSince = Math.floor((now.getTime() - lastUpdate.getTime()) / (1000 * 60 * 60 * 24));
+          const effectiveScore = Math.max(0, (sub.currentScore || 0) - daysSince);
 
-        groups.set(sub.id, {
-          subcategory: sub,
-          category: cat,
-          lessons: [],
-          effectiveScore,
-        });
-      }
-      const enriched = { ...lesson, project: projects.find((p) => p.id === lesson.projectId), category: cat, subcategory: sub };
-      groups.get(sub.id)!.lessons.push(enriched);
-    });
+          groups.set(sub.id, {
+            subcategory: sub,
+            category: cat,
+            lessons: [],
+            effectiveScore,
+          });
+        }
+        const enriched = { ...lesson, project: projects.find((p) => p.id === lesson.projectId), category: cat, subcategory: sub };
+        groups.get(sub.id)!.lessons.push(enriched);
+      });
 
-    return Array.from(groups.values()).sort((a, b) => b.effectiveScore - a.effectiveScore);
+      return Array.from(groups.values()).sort((a, b) => b.effectiveScore - a.effectiveScore);
+    };
+
+    return {
+      couldBeBetter: buildForType("CouldHaveGoneBetter"),
+      wentWell: buildForType("WentWell"),
+    };
   }, [filteredLessons, subcategories, categories, projects]);
-
-  const wentWellGroups = useMemo(() => {
-    const wwLessons = filteredLessons.filter((l) => l.type === "WentWell");
-    const groups: Map<number, { subcategory: LessonSubcategory; category: LessonCategory; lessons: LessonWithRelations[] }> = new Map();
-
-    wwLessons.forEach((lesson) => {
-      const sub = lesson.subcategory || subcategories.find((s) => s.id === lesson.subcategoryId);
-      const cat = sub ? (lesson.category || categories.find((c) => c.id === sub.categoryId)) : undefined;
-      if (!sub || !cat) return;
-
-      if (!groups.has(sub.id)) {
-        groups.set(sub.id, { subcategory: sub, category: cat, lessons: [] });
-      }
-      const enriched = { ...lesson, project: projects.find((p) => p.id === lesson.projectId), category: cat, subcategory: sub };
-      groups.get(sub.id)!.lessons.push(enriched);
-    });
-
-    return Array.from(groups.values()).sort((a, b) => a.category.name.localeCompare(b.category.name));
-  }, [filteredLessons, subcategories, categories, projects]);
-
-  const toggleCategory = (catId: number) => {
-    setExpandedCategories((prev) => {
-      const next = new Set(prev);
-      next.has(catId) ? next.delete(catId) : next.add(catId);
-      return next;
-    });
-  };
 
   const toggleSubcategory = (subId: number) => {
     setExpandedSubcategories((prev) => {
@@ -173,32 +152,22 @@ export default function Dashboard() {
   const couldBeBetterCount = lessons.filter((l) => l.type === "CouldHaveGoneBetter").length;
   const wentWellCount = lessons.filter((l) => l.type === "WentWell").length;
 
-  const groupsByCategory = (groups: SubcategoryGroup[] | { subcategory: LessonSubcategory; category: LessonCategory; lessons: LessonWithRelations[] }[]) => {
-    const catMap: Map<number, typeof groups> = new Map();
-    groups.forEach((g) => {
-      const catId = g.category.id;
-      if (!catMap.has(catId)) catMap.set(catId, []);
-      catMap.get(catId)!.push(g as any);
-    });
-    return catMap;
-  };
-
   if (lessonsLoading) {
     return (
       <div className="p-6 space-y-4">
         <Skeleton className="h-10 w-64" />
         <Skeleton className="h-12 w-full" />
-        <div className="space-y-4">
-          <Skeleton className="h-24 w-full" />
-          <Skeleton className="h-24 w-full" />
-          <Skeleton className="h-24 w-full" />
+        <div className="space-y-3">
+          <Skeleton className="h-16 w-full" />
+          <Skeleton className="h-16 w-full" />
+          <Skeleton className="h-16 w-full" />
         </div>
       </div>
     );
   }
 
-  const activeGroups = activeTab === "could-be-better" ? couldBeBetterGroups : wentWellGroups;
   const isCBB = activeTab === "could-be-better";
+  const activeGroups = isCBB ? buildGroups.couldBeBetter : buildGroups.wentWell;
 
   return (
     <div className="p-6 space-y-5">
@@ -242,7 +211,7 @@ export default function Dashboard() {
         />
       </Card>
 
-      <div className="space-y-4">
+      <div className="space-y-2">
         {activeGroups.length === 0 ? (
           <Card className="p-8 text-center">
             {isCBB ? (
@@ -255,79 +224,67 @@ export default function Dashboard() {
             </p>
           </Card>
         ) : (
-          (() => {
-            const catGroups = groupsByCategory(activeGroups);
-            return Array.from(catGroups.entries()).map(([catId, groups]) => {
-              const cat = (groups as any[])[0].category as LessonCategory;
-              const isExpanded = expandedCategories.has(catId) || expandedCategories.size === 0;
-              const totalLessons = (groups as any[]).reduce((a: number, g: any) => a + g.lessons.length, 0);
-              return (
-                <Collapsible key={catId} open={isExpanded} onOpenChange={() => toggleCategory(catId)}>
-                  <CollapsibleTrigger className="flex items-center gap-2 w-full text-left py-2 group" data-testid={`button-expand-category-${catId}`}>
-                    {isExpanded ? <ChevronDown className="w-4 h-4 text-muted-foreground" /> : <ChevronRight className="w-4 h-4 text-muted-foreground" />}
-                    <span className="font-semibold text-sm">{cat.name}</span>
-                    <span className="text-xs text-muted-foreground">({totalLessons} lesson{totalLessons !== 1 ? "s" : ""})</span>
+          activeGroups.map((group) => {
+            const isExpanded = expandedSubcategories.has(group.subcategory.id);
+            return (
+              <Card key={group.subcategory.id} className="overflow-visible" data-testid={`card-subcategory-${group.subcategory.id}`}>
+                <Collapsible open={isExpanded} onOpenChange={() => toggleSubcategory(group.subcategory.id)}>
+                  <CollapsibleTrigger className="flex items-center gap-3 w-full text-left p-4" data-testid={`button-expand-subcategory-${group.subcategory.id}`}>
+                    {isExpanded ? <ChevronDown className="w-4 h-4 text-muted-foreground flex-shrink-0" /> : <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />}
+                    <div className="flex-1 min-w-0 space-y-1.5">
+                      <div className="flex items-center justify-between gap-4 flex-wrap">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="font-medium text-sm" data-testid={`text-subcategory-name-${group.subcategory.id}`}>
+                            {group.subcategory.name}
+                          </span>
+                          <span className="text-xs text-muted-foreground flex-shrink-0">({group.category.name})</span>
+                        </div>
+                        <div className="flex items-center gap-3 flex-shrink-0">
+                          <span className="text-xs text-muted-foreground">{group.lessons.length} lesson{group.lessons.length !== 1 ? "s" : ""}</span>
+                          {isCBB && (
+                            <div className="flex items-center gap-1.5">
+                              <TrendingDown className={`w-3.5 h-3.5 ${getScoreColor(group.effectiveScore)}`} />
+                              <span className={`text-sm font-mono font-semibold ${getScoreColor(group.effectiveScore)}`} data-testid={`text-score-${group.subcategory.id}`}>
+                                {group.effectiveScore.toLocaleString()}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      {isCBB && (
+                        <div className="h-1.5 rounded-sm bg-muted overflow-hidden">
+                          <div
+                            className={`h-full rounded-sm transition-all ${getScoreBarColor(group.effectiveScore)}`}
+                            style={{ width: `${getScoreBarWidth(group.effectiveScore)}%` }}
+                          />
+                        </div>
+                      )}
+                    </div>
                   </CollapsibleTrigger>
-                  <CollapsibleContent className="pl-6 space-y-3 mt-1">
-                    {(groups as any[]).map((group: any) => {
-                      const isSubExpanded = expandedSubcategories.has(group.subcategory.id) || expandedSubcategories.size === 0;
-                      return (
-                        <Card key={group.subcategory.id} className="overflow-visible">
-                          <Collapsible open={isSubExpanded} onOpenChange={() => toggleSubcategory(group.subcategory.id)}>
-                            <CollapsibleTrigger className="flex items-center gap-3 w-full text-left p-4" data-testid={`button-expand-subcategory-${group.subcategory.id}`}>
-                              {isSubExpanded ? <ChevronDown className="w-4 h-4 text-muted-foreground flex-shrink-0" /> : <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />}
-                              <div className="flex-1 min-w-0 space-y-1.5">
-                                <div className="flex items-center justify-between gap-4 flex-wrap">
-                                  <span className="font-medium text-sm" data-testid={`text-subcategory-name-${group.subcategory.id}`}>{group.subcategory.name}</span>
-                                  {isCBB && (
-                                    <div className="flex items-center gap-2">
-                                      <TrendingDown className={`w-3.5 h-3.5 ${getScoreColor(group.effectiveScore)}`} />
-                                      <span className={`text-xs font-mono font-semibold ${getScoreColor(group.effectiveScore)}`} data-testid={`text-score-${group.subcategory.id}`}>
-                                        {group.effectiveScore.toLocaleString()}
-                                      </span>
-                                    </div>
-                                  )}
-                                </div>
-                                {isCBB && (
-                                  <div className="h-1.5 rounded-sm bg-muted overflow-hidden">
-                                    <div
-                                      className={`h-full rounded-sm transition-all ${getScoreBarColor(group.effectiveScore)}`}
-                                      style={{ width: `${getScoreBarWidth(group.effectiveScore)}%` }}
-                                    />
-                                  </div>
-                                )}
-                                <span className="text-xs text-muted-foreground">{group.lessons.length} lesson{group.lessons.length !== 1 ? "s" : ""}</span>
-                              </div>
-                            </CollapsibleTrigger>
-                            <CollapsibleContent className="px-4 pb-4">
-                              <div className="space-y-1.5 mt-1">
-                                {group.lessons
-                                  .sort((a: LessonWithRelations, b: LessonWithRelations) => new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime())
-                                  .map((lesson: LessonWithRelations) => (
-                                    <button
-                                      key={lesson.id}
-                                      onClick={() => setSelectedLesson(lesson)}
-                                      className="w-full text-left p-2.5 rounded-md hover-elevate flex items-center justify-between gap-3"
-                                      data-testid={`button-lesson-${lesson.id}`}
-                                    >
-                                      <div className="min-w-0">
-                                        <p className="text-sm font-medium truncate">{lesson.name}</p>
-                                        <p className="text-xs text-muted-foreground truncate">{lesson.project?.name || "—"} · {lesson.phase}</p>
-                                      </div>
-                                      <Badge variant="outline" className="text-xs flex-shrink-0 no-default-active-elevate">{lesson.phase}</Badge>
-                                    </button>
-                                  ))}
-                              </div>
-                            </CollapsibleContent>
-                          </Collapsible>
-                        </Card>
-                      );
-                    })}
+                  <CollapsibleContent className="px-4 pb-4">
+                    <div className="space-y-1.5 mt-1">
+                      {group.lessons
+                        .sort((a, b) => new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime())
+                        .map((lesson) => (
+                          <button
+                            key={lesson.id}
+                            onClick={() => setSelectedLesson(lesson)}
+                            className="w-full text-left p-2.5 rounded-md hover-elevate flex items-center justify-between gap-3"
+                            data-testid={`button-lesson-${lesson.id}`}
+                          >
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium truncate">{lesson.name}</p>
+                              <p className="text-xs text-muted-foreground truncate">{lesson.project?.name || "—"} · {lesson.phase}</p>
+                            </div>
+                            <Badge variant="outline" className="text-xs flex-shrink-0 no-default-active-elevate">{lesson.phase}</Badge>
+                          </button>
+                        ))}
+                    </div>
                   </CollapsibleContent>
                 </Collapsible>
-              );
-            });
-          })()
+              </Card>
+            );
+          })
         )}
       </div>
 
