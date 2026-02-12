@@ -45,13 +45,13 @@ export async function seedDatabase() {
 
   const now = new Date();
 
-  await storage.updateSubcategoryScore(sub1.id, 1200, now);
+  await storage.updateSubcategoryScore(sub1.id, 750, now);
   await storage.createSubcategoryFirstRecorded(sub1.id, new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000));
-  await storage.updateSubcategoryScore(sub7.id, 1000, now);
+  await storage.updateSubcategoryScore(sub7.id, 500, now);
   await storage.createSubcategoryFirstRecorded(sub7.id, new Date(now.getTime() - 20 * 24 * 60 * 60 * 1000));
-  await storage.updateSubcategoryScore(sub4.id, 800, now);
+  await storage.updateSubcategoryScore(sub4.id, 500, now);
   await storage.createSubcategoryFirstRecorded(sub4.id, new Date(now.getTime() - 15 * 24 * 60 * 60 * 1000));
-  await storage.updateSubcategoryScore(sub6.id, 400, now);
+  await storage.updateSubcategoryScore(sub6.id, 250, now);
   await storage.createSubcategoryFirstRecorded(sub6.id, new Date(now.getTime() - 45 * 24 * 60 * 60 * 1000));
 
   const proj1 = await storage.createProject({

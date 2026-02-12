@@ -15,7 +15,7 @@ A full-stack web application for capturing, organizing, and learning from projec
 - Filtering by project type, phase, category, subcategory, and text search
 - Collapsible category/subcategory groupings
 - Lesson detail drill-down dialog
-- Scoring system: subcategories start at 1000 when first "Could Be Better" lesson is recorded, decay by 1 point per day, boost by 200 for each new issue
+- Scoring system: subcategories start at 500 when first "Could Be Better" lesson is recorded, decay by 1 point per day, boost by 250 for each new issue
 - Role-based access control: User, Administrator, Superadministrator
 - Admin page for managing reference data and user roles
 

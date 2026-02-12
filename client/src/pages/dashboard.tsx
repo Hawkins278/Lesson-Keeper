@@ -31,20 +31,20 @@ interface ReferenceData {
 }
 
 function getScoreColor(score: number) {
-  if (score >= 1000) return "text-destructive";
-  if (score >= 600) return "text-chart-4";
-  if (score >= 300) return "text-chart-3";
+  if (score >= 750) return "text-destructive";
+  if (score >= 500) return "text-chart-4";
+  if (score >= 250) return "text-chart-3";
   return "text-chart-2";
 }
 
 function getScoreBarWidth(score: number) {
-  return Math.min(100, Math.max(3, (score / 1500) * 100));
+  return Math.min(100, Math.max(3, (score / 1000) * 100));
 }
 
 function getScoreBarColor(score: number) {
-  if (score >= 1000) return "bg-destructive/70";
-  if (score >= 600) return "bg-chart-4/70";
-  if (score >= 300) return "bg-chart-3/70";
+  if (score >= 750) return "bg-destructive/70";
+  if (score >= 500) return "bg-chart-4/70";
+  if (score >= 250) return "bg-chart-3/70";
   return "bg-chart-2/70";
 }
 

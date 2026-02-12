@@ -552,12 +552,12 @@ export async function registerRoutes(
           const now = new Date();
           if (!subcategory.firstRecordedDate) {
             await storage.createSubcategoryFirstRecorded(subcategory.id, now);
-            await storage.updateSubcategoryScore(subcategory.id, 1000, now);
+            await storage.updateSubcategoryScore(subcategory.id, 500, now);
           } else {
             const lastUpdate = subcategory.lastScoreUpdatedAt ? new Date(subcategory.lastScoreUpdatedAt) : now;
             const daysSince = Math.max(0, Math.floor((now.getTime() - lastUpdate.getTime()) / (1000 * 60 * 60 * 24)));
             const decayed = Math.max(0, (subcategory.currentScore || 0) - daysSince);
-            const newScore = decayed + 200;
+            const newScore = decayed + 250;
             await storage.updateSubcategoryScore(subcategory.id, newScore, now);
           }
           subcategory = (await storage.findSubcategoryByNameAndCategory(lesson.subcategory, category.id))!;
