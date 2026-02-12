@@ -134,11 +134,13 @@ export default function LandingPage() {
 
       <footer className="border-t">
         <div className="max-w-6xl mx-auto px-6 py-6 flex flex-wrap items-center justify-between gap-4 text-sm text-muted-foreground">
-          <div>
-            <span className="block">LessonKeeper &copy; {new Date().getFullYear()}</span>
-            <span className="block text-xs">a Hawkins-Digital product</span>
+          <div className="flex items-center gap-3">
+            <img src={hawkinsLogo} alt="Hawkins-Digital" className="h-10 w-10 rounded-md object-cover" data-testid="img-hawkins-logo" />
+            <div>
+              <span className="block">LessonKeeper &copy; {new Date().getFullYear()}</span>
+              <span className="block text-xs">a Hawkins-Digital product</span>
+            </div>
           </div>
-          <img src={hawkinsLogo} alt="Hawkins-Digital" className="h-10 w-10 rounded-md object-cover" data-testid="img-hawkins-logo" />
         </div>
       </footer>
     </div>

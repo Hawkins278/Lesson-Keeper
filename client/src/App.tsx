@@ -14,6 +14,9 @@ import Dashboard from "@/pages/dashboard";
 import UploadPage from "@/pages/upload";
 import ProjectsPage from "@/pages/projects";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import hawkinsLogo from "@assets/Hawkins-Digital_1770883345237.jpg";
 
 function AuthenticatedApp() {
   const { user, isLoading, isAuthenticated } = useAuth();
@@ -55,6 +58,29 @@ function AuthenticatedApp() {
               <Route component={NotFound} />
             </Switch>
           </main>
+          <footer className="border-t bg-background">
+            <div className="px-4 py-3 flex flex-wrap items-center justify-between gap-4 text-sm text-muted-foreground">
+              <div className="flex items-center gap-3">
+                <img src={hawkinsLogo} alt="Hawkins-Digital" className="h-8 w-8 rounded-md object-cover" data-testid="img-footer-logo" />
+                <div>
+                  <span className="block text-xs font-medium">LessonKeeper</span>
+                  <span className="block text-xs">a Hawkins-Digital product</span>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="text-right">
+                  <span className="block text-xs" data-testid="text-footer-logged-in">Logged in as {user!.email || `${user!.firstName} ${user!.lastName}`}</span>
+                  <Badge variant="secondary" className="text-xs mt-0.5" data-testid="badge-footer-role">User</Badge>
+                </div>
+                <Avatar className="h-8 w-8" data-testid="avatar-footer-user">
+                  <AvatarImage src={user!.profileImageUrl || undefined} />
+                  <AvatarFallback className="text-xs">
+                    {`${(user!.firstName || "")[0] || ""}${(user!.lastName || "")[0] || ""}`.toUpperCase() || "U"}
+                  </AvatarFallback>
+                </Avatar>
+              </div>
+            </div>
+          </footer>
         </div>
       </div>
     </SidebarProvider>
