@@ -1,13 +1,12 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { X, Search, SlidersHorizontal } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import type { LessonCategory, LessonSubcategory } from "@shared/schema";
+import { X, Search } from "lucide-react";
+import type { LessonCategory, LessonSubcategory, ReferenceValue } from "@shared/schema";
 
 export interface FilterState {
-  projectTypes: string[];
-  phases: string[];
+  projectType: string | null;
+  phase: string | null;
   categoryId: string | null;
   subcategoryId: string | null;
   search: string;
@@ -18,8 +17,8 @@ interface FiltersProps {
   onFiltersChange: (filters: FilterState) => void;
   categories: LessonCategory[];
   subcategories: LessonSubcategory[];
-  availableProjectTypes: string[];
-  availablePhases: string[];
+  referenceProjectTypes: ReferenceValue[];
+  referencePhases: ReferenceValue[];
 }
 
 export function Filters({
@@ -27,110 +26,88 @@ export function Filters({
   onFiltersChange,
   categories,
   subcategories,
-  availableProjectTypes,
-  availablePhases,
+  referenceProjectTypes,
+  referencePhases,
 }: FiltersProps) {
   const filteredSubcategories = filters.categoryId
     ? subcategories.filter((s) => s.categoryId === parseInt(filters.categoryId!))
     : subcategories;
 
   const hasActiveFilters =
-    filters.projectTypes.length > 0 ||
-    filters.phases.length > 0 ||
+    filters.projectType !== null ||
+    filters.phase !== null ||
     filters.categoryId !== null ||
     filters.subcategoryId !== null ||
     filters.search !== "";
 
   const clearAll = () => {
     onFiltersChange({
-      projectTypes: [],
-      phases: [],
+      projectType: null,
+      phase: null,
       categoryId: null,
       subcategoryId: null,
       search: "",
     });
   };
 
-  const toggleProjectType = (pt: string) => {
-    const newTypes = filters.projectTypes.includes(pt)
-      ? filters.projectTypes.filter((t) => t !== pt)
-      : [...filters.projectTypes, pt];
-    onFiltersChange({ ...filters, projectTypes: newTypes });
-  };
-
-  const togglePhase = (phase: string) => {
-    const newPhases = filters.phases.includes(phase)
-      ? filters.phases.filter((p) => p !== phase)
-      : [...filters.phases, phase];
-    onFiltersChange({ ...filters, phases: newPhases });
-  };
-
   return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-2">
-        <SlidersHorizontal className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-        <span className="text-sm font-medium">Filters</span>
-        {hasActiveFilters && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={clearAll}
-            className="ml-auto text-xs"
-            data-testid="button-clear-filters"
-          >
-            <X className="w-3 h-3 mr-1" />
-            Clear all
-          </Button>
-        )}
-      </div>
-
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input
-          placeholder="Search lessons..."
-          value={filters.search}
-          onChange={(e) => onFiltersChange({ ...filters, search: e.target.value })}
-          className="pl-9"
-          data-testid="input-search"
-        />
-      </div>
-
-      <div className="space-y-2">
-        <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Project Type</label>
-        <div className="flex flex-wrap gap-1.5">
-          {availableProjectTypes.map((pt) => (
-            <Badge
-              key={pt}
-              variant={filters.projectTypes.includes(pt) ? "default" : "outline"}
-              className="cursor-pointer toggle-elevate"
-              onClick={() => toggleProjectType(pt)}
-              data-testid={`badge-filter-type-${pt}`}
-            >
-              {pt}
-            </Badge>
-          ))}
+    <div className="flex flex-wrap items-end gap-3">
+      <div className="space-y-1 min-w-[160px] flex-1">
+        <label className="text-xs font-medium text-muted-foreground">Search</label>
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            placeholder="Search lessons..."
+            value={filters.search}
+            onChange={(e) => onFiltersChange({ ...filters, search: e.target.value })}
+            className="pl-9"
+            data-testid="input-search"
+          />
         </div>
       </div>
 
-      <div className="space-y-2">
-        <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Phase</label>
-        <div className="flex flex-wrap gap-1.5">
-          {availablePhases.map((phase) => (
-            <Badge
-              key={phase}
-              variant={filters.phases.includes(phase) ? "default" : "outline"}
-              className="cursor-pointer toggle-elevate"
-              onClick={() => togglePhase(phase)}
-              data-testid={`badge-filter-phase-${phase}`}
-            >
-              {phase}
-            </Badge>
-          ))}
-        </div>
+      <div className="space-y-1 min-w-[150px]">
+        <label className="text-xs font-medium text-muted-foreground">Project Type</label>
+        <Select
+          value={filters.projectType || "all"}
+          onValueChange={(v) => onFiltersChange({ ...filters, projectType: v === "all" ? null : v })}
+        >
+          <SelectTrigger data-testid="select-project-type">
+            <SelectValue placeholder="All types" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All types</SelectItem>
+            {referenceProjectTypes.map((pt) => (
+              <SelectItem key={pt.id} value={pt.value}>
+                {pt.value}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
-      <div className="space-y-2">
-        <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Category</label>
+      <div className="space-y-1 min-w-[140px]">
+        <label className="text-xs font-medium text-muted-foreground">Phase</label>
+        <Select
+          value={filters.phase || "all"}
+          onValueChange={(v) => onFiltersChange({ ...filters, phase: v === "all" ? null : v })}
+        >
+          <SelectTrigger data-testid="select-phase">
+            <SelectValue placeholder="All phases" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All phases</SelectItem>
+            {referencePhases.map((p) => (
+              <SelectItem key={p.id} value={p.value}>
+                {p.value}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-1 min-w-[150px]">
+        <label className="text-xs font-medium text-muted-foreground">Category</label>
         <Select
           value={filters.categoryId || "all"}
           onValueChange={(v) =>
@@ -155,8 +132,8 @@ export function Filters({
         </Select>
       </div>
 
-      <div className="space-y-2">
-        <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Subcategory</label>
+      <div className="space-y-1 min-w-[150px]">
+        <label className="text-xs font-medium text-muted-foreground">Subcategory</label>
         <Select
           value={filters.subcategoryId || "all"}
           onValueChange={(v) =>
@@ -176,6 +153,19 @@ export function Filters({
           </SelectContent>
         </Select>
       </div>
+
+      {hasActiveFilters && (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={clearAll}
+          className="text-xs flex-shrink-0"
+          data-testid="button-clear-filters"
+        >
+          <X className="w-3 h-3 mr-1" />
+          Clear
+        </Button>
+      )}
     </div>
   );
 }
