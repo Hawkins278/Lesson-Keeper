@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { BookOpen, Upload, TrendingUp, Shield, BarChart3, Lightbulb } from "lucide-react";
+import hawkinsLogo from "@assets/Hawkins-Digital_1770883345237.jpg";
 
 export default function LandingPage() {
   return (
@@ -12,7 +13,7 @@ export default function LandingPage() {
             <div className="w-8 h-8 rounded-md bg-primary flex items-center justify-center">
               <BookOpen className="w-4 h-4 text-primary-foreground" />
             </div>
-            <span className="font-semibold text-lg tracking-tight" data-testid="text-app-name">LessonsDB</span>
+            <span className="font-semibold text-lg tracking-tight" data-testid="text-app-name">LessonKeeper</span>
           </div>
           <div className="flex items-center gap-2">
             <ThemeToggle />
@@ -133,8 +134,11 @@ export default function LandingPage() {
 
       <footer className="border-t">
         <div className="max-w-6xl mx-auto px-6 py-6 flex flex-wrap items-center justify-between gap-4 text-sm text-muted-foreground">
-          <span>LessonsDB &copy; {new Date().getFullYear()}</span>
-          <span>Built for project teams</span>
+          <div>
+            <span className="block">LessonKeeper &copy; {new Date().getFullYear()}</span>
+            <span className="block text-xs">a Hawkins-Digital product</span>
+          </div>
+          <img src={hawkinsLogo} alt="Hawkins-Digital" className="h-10 w-10 rounded-md object-cover" data-testid="img-hawkins-logo" />
         </div>
       </footer>
     </div>

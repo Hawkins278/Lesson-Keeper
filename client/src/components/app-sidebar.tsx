@@ -40,7 +40,7 @@ export function AppSidebar({ user }: AppSidebarProps) {
           <div className="w-8 h-8 rounded-md bg-primary flex items-center justify-center flex-shrink-0">
             <BookOpen className="w-4 h-4 text-primary-foreground" />
           </div>
-          <span className="font-semibold text-base tracking-tight" data-testid="text-sidebar-logo">LessonsDB</span>
+          <span className="font-semibold text-base tracking-tight" data-testid="text-sidebar-logo">LessonKeeper</span>
         </div>
       </SidebarHeader>
       <SidebarContent>
