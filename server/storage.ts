@@ -27,6 +27,7 @@ export interface IStorage {
   createSubcategoryFirstRecorded(id: number, date: Date): Promise<void>;
 
   getLessons(): Promise<(Lesson & { project?: Project; category?: LessonCategory; subcategory?: LessonSubcategory })[]>;
+  getLessonsByProject(projectId: number): Promise<(Lesson & { category?: LessonCategory; subcategory?: LessonSubcategory })[]>;
   getLesson(id: number): Promise<Lesson | undefined>;
   createLesson(lesson: InsertLesson): Promise<Lesson>;
 
@@ -127,6 +128,21 @@ export class DatabaseStorage implements IStorage {
         category,
         subcategory,
       };
+    });
+  }
+
+  async getLessonsByProject(projectId: number): Promise<(Lesson & { category?: LessonCategory; subcategory?: LessonSubcategory })[]> {
+    const projectLessons = await db.select().from(lessons).where(eq(lessons.projectId, projectId)).orderBy(desc(lessons.createdAt));
+    const allCategories = await this.getCategories();
+    const allSubcategories = await this.getSubcategories();
+
+    const categoryMap = new Map(allCategories.map((c) => [c.id, c]));
+    const subcategoryMap = new Map(allSubcategories.map((s) => [s.id, s]));
+
+    return projectLessons.map((lesson) => {
+      const subcategory = subcategoryMap.get(lesson.subcategoryId);
+      const category = subcategory ? categoryMap.get(subcategory.categoryId) : undefined;
+      return { ...lesson, category, subcategory };
     });
   }
 

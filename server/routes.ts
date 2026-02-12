@@ -74,6 +74,18 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/projects/:id/lessons", isAuthenticated, async (req: any, res) => {
+    try {
+      const projectId = parseInt(req.params.id);
+      if (isNaN(projectId)) return res.status(400).json({ message: "Invalid project ID" });
+      const projectLessons = await storage.getLessonsByProject(projectId);
+      res.json(projectLessons);
+    } catch (error) {
+      console.error("Error fetching project lessons:", error);
+      res.status(500).json({ message: "Failed to fetch project lessons" });
+    }
+  });
+
   app.get("/api/lessons", isAuthenticated, async (_req, res) => {
     try {
       const lessons = await storage.getLessons();
