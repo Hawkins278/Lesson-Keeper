@@ -273,7 +273,7 @@ export default function Dashboard() {
                             data-testid={`button-lesson-${lesson.id}`}
                           >
                             <div className="min-w-0">
-                              <p className="text-sm font-medium truncate">{lesson.name}</p>
+                              <p className="text-sm font-medium truncate"><span className="text-muted-foreground font-mono mr-1.5">#{lesson.id}</span>{lesson.name}</p>
                               <p className="text-xs text-muted-foreground truncate">{lesson.project?.name || "—"} · {lesson.phase}</p>
                             </div>
                             <Badge variant="outline" className="text-xs flex-shrink-0 no-default-active-elevate">{lesson.phase}</Badge>

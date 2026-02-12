@@ -105,7 +105,7 @@ function ProjectLessons({ projectId }: { projectId: number }) {
                         {isWentWell ? "Went Well" : "Could Be Better"}
                       </Badge>
                       <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium truncate" data-testid={`text-lesson-name-${lesson.id}`}>{lesson.name}</p>
+                        <p className="text-sm font-medium truncate" data-testid={`text-lesson-name-${lesson.id}`}><span className="text-muted-foreground font-mono mr-1.5">#{lesson.id}</span>{lesson.name}</p>
                         {lesson.eventDescription && (
                           <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">{lesson.eventDescription}</p>
                         )}

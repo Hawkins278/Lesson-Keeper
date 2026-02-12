@@ -27,7 +27,7 @@ export function LessonDetailDialog({ lesson, open, onOpenChange }: LessonDetailD
           <div className="flex items-start gap-3">
             <div className="flex-1 min-w-0">
               <DialogTitle className="text-lg leading-snug" data-testid="text-lesson-detail-title">
-                {lesson.name}
+                <span className="text-muted-foreground font-mono mr-1.5">#{lesson.id}</span>{lesson.name}
               </DialogTitle>
               <div className="flex flex-wrap items-center gap-2 mt-2">
                 <Badge
