@@ -17,6 +17,11 @@ class AuthStorage implements IAuthStorage {
     const existingUser = await this.getUser(userData.id!);
 
     if (existingUser) {
+      const existingRole = (existingUser.role || "").toLowerCase().trim();
+      const normalizedRole = (existingRole === "superadmin" || existingRole === "superadministrator")
+        ? "admin"
+        : existingUser.role;
+
       const [user] = await db
         .update(users)
         .set({
@@ -24,6 +29,7 @@ class AuthStorage implements IAuthStorage {
           firstName: userData.firstName,
           lastName: userData.lastName,
           profileImageUrl: userData.profileImageUrl,
+          role: normalizedRole,
           updatedAt: new Date(),
         })
         .where(eq(users.id, userData.id!))
@@ -34,7 +40,7 @@ class AuthStorage implements IAuthStorage {
     const [adminCount] = await db
       .select({ count: sql<number>`count(*)` })
       .from(users)
-      .where(eq(users.role, "admin"));
+      .where(sql`lower(${users.role}) in ('admin', 'superadmin', 'superadministrator')`);
     const hasAdmins = Number(adminCount.count) > 0;
 
     const [user] = await db

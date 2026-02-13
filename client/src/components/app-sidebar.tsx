@@ -19,8 +19,16 @@ import type { User } from "@shared/models/auth";
 
 const ROLE_LABELS: Record<string, string> = {
   admin: "Admin",
+  superadmin: "Admin",
+  superadministrator: "Admin",
   user: "User",
 };
+
+function isAdmin(role?: string | null): boolean {
+  if (!role) return false;
+  const r = role.toLowerCase().trim();
+  return r === "admin" || r === "superadmin" || r === "superadministrator";
+}
 
 const userNavItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
@@ -38,7 +46,7 @@ interface AppSidebarProps {
 
 export function AppSidebar({ user }: AppSidebarProps) {
   const [location] = useLocation();
-  const isAdminUser = user?.role === "admin";
+  const isAdminUser = isAdmin(user?.role);
 
   const initials = user
     ? `${(user.firstName || "")[0] || ""}${(user.lastName || "")[0] || ""}`.toUpperCase() || "U"

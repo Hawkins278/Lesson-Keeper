@@ -380,7 +380,7 @@ export default function AdminPage() {
   const [adminEmail, setAdminEmail] = useState("");
 
   const currentUserRole = user?.role as string;
-  const isCurrentAdmin = currentUserRole === "admin";
+  const isCurrentAdmin = currentUserRole === "admin" || currentUserRole === "superadmin" || currentUserRole === "superadministrator";
 
   const { data: refData, isLoading: refLoading } = useQuery<ReferenceData>({
     queryKey: ["/api/reference-data"],

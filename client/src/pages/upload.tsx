@@ -31,7 +31,8 @@ export default function UploadPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  if (user?.role !== "admin") {
+  const userRole = user?.role?.toLowerCase().trim();
+  if (userRole !== "admin" && userRole !== "superadmin" && userRole !== "superadministrator") {
     return (
       <div className="flex items-center justify-center h-full">
         <p className="text-muted-foreground">You do not have access to this page.</p>

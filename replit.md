@@ -67,4 +67,5 @@ client/src/components/     - Sidebar, Filters, LessonDetailDialog, ThemeToggle
 - 2026-02-12: Updated branding to LessonKeeper with Hawkins-Digital logo
 - 2026-02-11: Added reference data management form with add/remove for all four field types
 - 2026-02-11: Added ReferenceValues table for ProjectType and ProjectPhase with seeded defaults
+- 2026-02-13: Fixed role checking to accept legacy "superadmin"/"superadministrator" values alongside "admin"; normalizes to "admin" on next login; case-insensitive email lookups throughout
 - 2026-02-11: Initial MVP implementation with all core features

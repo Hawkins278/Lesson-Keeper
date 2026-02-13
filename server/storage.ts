@@ -237,11 +237,26 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getUsersByRole(role: UserRole): Promise<User[]> {
+    if (role === "admin") {
+      return db.select().from(users)
+        .where(sql`lower(${users.role}) in ('admin', 'superadmin', 'superadministrator')`)
+        .orderBy(users.email);
+    }
     return db.select().from(users).where(eq(users.role, role)).orderBy(users.email);
   }
 
   async getUsersByRoles(roles: UserRole[]): Promise<User[]> {
-    return db.select().from(users).where(inArray(users.role, roles)).orderBy(users.email);
+    const expandedRoles: string[] = [];
+    for (const r of roles) {
+      if (r === "admin") {
+        expandedRoles.push("admin", "superadmin", "superadministrator");
+      } else {
+        expandedRoles.push(r);
+      }
+    }
+    return db.select().from(users)
+      .where(sql`lower(${users.role}) in (${sql.join(expandedRoles.map(r => sql`${r}`), sql`, `)})`)
+      .orderBy(users.email);
   }
 
   async setUserRole(userId: string, role: UserRole): Promise<User | undefined> {
@@ -255,12 +270,18 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getUserByEmail(email: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.email, email));
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(sql`lower(${users.email}) = lower(${email})`);
     return user;
   }
 
   async countUsersByRole(role: UserRole): Promise<number> {
-    const [result] = await db.select({ count: sql<number>`count(*)` }).from(users).where(eq(users.role, role));
+    const [result] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(users)
+      .where(sql`lower(${users.role}) in ('admin', 'superadmin', 'superadministrator')`);
     return Number(result.count);
   }
 }

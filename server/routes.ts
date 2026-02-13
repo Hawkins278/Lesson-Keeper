@@ -9,11 +9,17 @@ import type { UserRole } from "@shared/models/auth";
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
+function hasAdminRole(role: string | null | undefined): boolean {
+  if (!role) return false;
+  const normalized = role.toLowerCase().trim();
+  return normalized === "admin" || normalized === "superadmin" || normalized === "superadministrator";
+}
+
 const isAdmin: RequestHandler = async (req: any, res, next) => {
   const userId = req.user?.claims?.sub;
   if (!userId) return res.status(401).json({ message: "Unauthorized" });
   const user = await storage.getUserById(userId);
-  if (!user || user.role !== "admin") {
+  if (!user || !hasAdminRole(user.role)) {
     return res.status(403).json({ message: "Forbidden: admin access required" });
   }
   (req as any).dbUser = user;
@@ -676,7 +682,7 @@ export async function registerRoutes(
       const targetUser = await storage.getUserByEmail(email);
       if (!targetUser) return res.status(404).json({ message: "No user found with that email. They must log in at least once first." });
 
-      if (targetUser.role === "admin") {
+      if (hasAdminRole(targetUser.role)) {
         return res.status(409).json({ message: "User is already an admin" });
       }
 
@@ -692,7 +698,7 @@ export async function registerRoutes(
     try {
       const { userId } = req.params;
       const targetUser = await storage.getUserById(userId);
-      if (!targetUser || targetUser.role !== "admin") {
+      if (!targetUser || !hasAdminRole(targetUser.role)) {
         return res.status(404).json({ message: "Admin not found" });
       }
 
