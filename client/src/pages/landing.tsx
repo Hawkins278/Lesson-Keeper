@@ -3,8 +3,10 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { BookOpen, TrendingDown, LogIn, KeyRound } from "lucide-react";
+import { TrendingDown, LogIn, KeyRound } from "lucide-react";
 import hawkinsLogo from "@assets/Hawkins-Digital_1770883345237.jpg";
+import citbLogo from "@assets/citb_logo_1770915007635.png";
+import hermitIcon from "@assets/Zeppelin_hermit_1_1770990450114.png";
 
 interface TopSubcategory {
   id: number;
@@ -38,19 +40,17 @@ export default function LandingPage() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      <nav className="sticky top-0 z-50 backdrop-blur-md bg-background/80 border-b">
-        <div className="max-w-5xl mx-auto flex items-center justify-between gap-4 px-6 py-3">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-md bg-primary flex items-center justify-center">
-              <BookOpen className="w-4 h-4 text-primary-foreground" />
-            </div>
-            <span className="text-[1.7rem] leading-none tracking-tight" style={{ fontFamily: '"Boucherie Block W05 Bold", serif' }} data-testid="text-app-name">LessonKeeper</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <ThemeToggle />
-          </div>
+      <header className="sticky top-0 z-50 flex items-center justify-between gap-4 px-3 py-1.5 border-b bg-background/80 backdrop-blur-md">
+        <div />
+        <div className="flex items-center gap-3">
+          <span className="text-5xl tracking-tight" style={{ fontFamily: '"Boucherie Block W05 Bold", serif' }} data-testid="text-header-logo">LessonKeeper</span>
+          <img src={hermitIcon} alt="LessonKeeper" className="h-[72px] w-[72px] rounded-md object-cover" data-testid="img-hermit-icon" />
         </div>
-      </nav>
+        <div className="flex items-center gap-2">
+          <img src={citbLogo} alt="CITB" className="h-[108px] w-[108px] rounded-md object-contain" data-testid="img-citb-logo" />
+          <ThemeToggle />
+        </div>
+      </header>
 
       <div className="flex-1 flex flex-col justify-center">
         <div className="max-w-5xl mx-auto w-full px-6 py-16 space-y-12">
@@ -122,14 +122,18 @@ export default function LandingPage() {
         </div>
       </div>
 
-      <footer className="border-t">
-        <div className="max-w-5xl mx-auto px-6 py-6 flex flex-wrap items-center justify-between gap-4 text-sm text-muted-foreground">
+      <footer className="border-t bg-background">
+        <div className="px-4 py-1.5 flex flex-wrap items-center justify-between gap-4 text-sm text-muted-foreground">
           <div className="flex items-center gap-3">
-            <img src={hawkinsLogo} alt="Hawkins-Digital" className="h-10 w-10 rounded-md object-cover" data-testid="img-hawkins-logo" />
-            <div>
-              <span className="block" style={{ fontFamily: '"Boucherie Block W05 Bold", serif' }}>LessonKeeper &copy; {new Date().getFullYear()}</span>
-              <span className="block text-xs">a Hawkins-Digital product</span>
-            </div>
+            <img src={hawkinsLogo} alt="Hawkins-Digital" className="h-[52px] w-[52px] rounded-md object-cover" data-testid="img-footer-logo" />
+            <span className="align-super text-[0.45rem]">TM</span>
+            <span className="text-[0.9rem] text-muted-foreground">A Hawkins-Digital<span className="align-super text-[0.5rem]">TM</span> product</span>
+          </div>
+          <div className="text-[0.9rem]">
+            <span style={{ fontFamily: '"Boucherie Block W05 Bold", serif' }}>LessonKeeper</span>
+            <span className="align-super text-[0.5rem]">TM</span>
+            <span className="mx-1.5">&middot;</span>
+            <span>Copyright &copy; 2026</span>
           </div>
         </div>
       </footer>
