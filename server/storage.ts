@@ -16,6 +16,7 @@ export interface IStorage {
   getProject(id: number): Promise<Project | undefined>;
   findProjectByNameAndType(name: string, projectType: string): Promise<Project | undefined>;
   createProject(project: InsertProject): Promise<Project>;
+  updateProject(id: number, data: Partial<InsertProject>): Promise<Project | undefined>;
 
   getCategories(): Promise<LessonCategory[]>;
   findCategoryByName(name: string): Promise<LessonCategory | undefined>;
@@ -31,6 +32,7 @@ export interface IStorage {
   getLessonsByProject(projectId: number): Promise<(Lesson & { category?: LessonCategory; subcategory?: LessonSubcategory; impact?: ImpactLevel })[]>;
   getLesson(id: number): Promise<Lesson | undefined>;
   createLesson(lesson: InsertLesson): Promise<Lesson>;
+  updateLesson(id: number, data: Partial<InsertLesson>): Promise<Lesson | undefined>;
 
   getReferenceValues(type: string): Promise<ReferenceValue[]>;
   createReferenceValue(value: InsertReferenceValue): Promise<ReferenceValue>;
@@ -85,6 +87,11 @@ export class DatabaseStorage implements IStorage {
   async createProject(project: InsertProject): Promise<Project> {
     const [created] = await db.insert(projects).values(project).returning();
     return created;
+  }
+
+  async updateProject(id: number, data: Partial<InsertProject>): Promise<Project | undefined> {
+    const [updated] = await db.update(projects).set(data).where(eq(projects.id, id)).returning();
+    return updated;
   }
 
   async getCategories(): Promise<LessonCategory[]> {
@@ -180,6 +187,11 @@ export class DatabaseStorage implements IStorage {
   async createLesson(lesson: InsertLesson): Promise<Lesson> {
     const [created] = await db.insert(lessons).values(lesson).returning();
     return created;
+  }
+
+  async updateLesson(id: number, data: Partial<InsertLesson>): Promise<Lesson | undefined> {
+    const [updated] = await db.update(lessons).set(data).where(eq(lessons.id, id)).returning();
+    return updated;
   }
 
   async getReferenceValues(type: string): Promise<ReferenceValue[]> {

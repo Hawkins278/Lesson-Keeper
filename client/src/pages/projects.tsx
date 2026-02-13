@@ -1,13 +1,20 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
-import { FolderOpen, CalendarDays, User, FileText, ChevronDown, ChevronRight, Loader2 } from "lucide-react";
+import { FolderOpen, CalendarDays, User, FileText, ChevronDown, ChevronRight, Loader2, Pencil, X, Save } from "lucide-react";
 import { LessonDetailDialog } from "@/components/lesson-detail-dialog";
 import { formatUKDate } from "@/lib/format-date";
-import type { Project, Lesson, LessonCategory, LessonSubcategory, ImpactLevel } from "@shared/schema";
+import { useAuth } from "@/hooks/use-auth";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import type { Project, Lesson, LessonCategory, LessonSubcategory, ImpactLevel, ReferenceValue } from "@shared/schema";
 
 type EnrichedLesson = Lesson & { category?: LessonCategory; subcategory?: LessonSubcategory; impact?: ImpactLevel };
 
@@ -46,16 +53,11 @@ function groupLessonsByCategoryAndSubcategory(lessons: EnrichedLesson[]): Catego
     .sort((a, b) => a.category.name.localeCompare(b.category.name));
 }
 
-function ProjectLessons({ projectId }: { projectId: number }) {
+function ProjectLessons({ projectId, isAdmin }: { projectId: number; isAdmin: boolean }) {
   const [selectedLesson, setSelectedLesson] = useState<(EnrichedLesson & { project?: Project }) | null>(null);
 
   const { data: lessons = [], isLoading } = useQuery<EnrichedLesson[]>({
     queryKey: ["/api/projects", projectId, "lessons"],
-    queryFn: async () => {
-      const res = await fetch(`/api/projects/${projectId}/lessons`, { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to fetch lessons");
-      return res.json();
-    },
   });
 
   if (isLoading) {
@@ -132,13 +134,91 @@ function ProjectLessons({ projectId }: { projectId: number }) {
         lesson={selectedLesson}
         open={!!selectedLesson}
         onOpenChange={(open) => { if (!open) setSelectedLesson(null); }}
+        isAdmin={isAdmin}
       />
     </div>
   );
 }
 
+function ProjectEditForm({ project, onCancel, onSaved }: { project: Project; onCancel: () => void; onSaved: () => void }) {
+  const [name, setName] = useState(project.name);
+  const [projectType, setProjectType] = useState(project.projectType);
+  const [closeDate, setCloseDate] = useState(project.closeDate || "");
+  const [projectManager, setProjectManager] = useState(project.projectManager || "");
+  const [description, setDescription] = useState(project.description || "");
+  const { toast } = useToast();
+
+  const { data: projectTypes = [] } = useQuery<ReferenceValue[]>({
+    queryKey: ["/api/reference-data", "ProjectType"],
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("PATCH", `/api/projects/${project.id}`, {
+        name, projectType, closeDate, projectManager, description,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+      toast({ title: "Project updated" });
+      onSaved();
+    },
+    onError: (error: Error) => {
+      toast({ title: "Failed to update project", description: error.message, variant: "destructive" });
+    },
+  });
+
+  return (
+    <div className="space-y-3 p-4">
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-muted-foreground">Project Name</label>
+          <Input value={name} onChange={(e) => setName(e.target.value)} data-testid="input-edit-project-name" />
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-muted-foreground">Project Type</label>
+          <Select value={projectType} onValueChange={setProjectType}>
+            <SelectTrigger data-testid="select-edit-project-type">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {projectTypes.map((pt) => (
+                <SelectItem key={pt.id} value={pt.value}>{pt.value}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-muted-foreground">Project Manager</label>
+          <Input value={projectManager} onChange={(e) => setProjectManager(e.target.value)} data-testid="input-edit-project-manager" />
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-muted-foreground">Close Date</label>
+          <Input value={closeDate} onChange={(e) => setCloseDate(e.target.value)} placeholder="DD-Mon-YYYY" data-testid="input-edit-project-close-date" />
+        </div>
+      </div>
+      <div className="space-y-1">
+        <label className="text-xs font-medium text-muted-foreground">Description</label>
+        <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} data-testid="input-edit-project-description" />
+      </div>
+      <div className="flex items-center gap-2 justify-end">
+        <Button variant="ghost" size="sm" onClick={onCancel} data-testid="button-cancel-edit-project">
+          <X className="w-3.5 h-3.5 mr-1" /> Cancel
+        </Button>
+        <Button size="sm" onClick={() => updateMutation.mutate()} disabled={updateMutation.isPending} data-testid="button-save-project">
+          <Save className="w-3.5 h-3.5 mr-1" /> Save
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export default function ProjectsPage() {
+  const { user } = useAuth();
+  const userRole = (user?.role as string || "").toLowerCase().trim();
+  const isAdminUser = userRole === "admin" || userRole === "superadmin" || userRole === "superadministrator";
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [editingProjectId, setEditingProjectId] = useState<number | null>(null);
 
   const { data: projects = [], isLoading } = useQuery<Project[]>({
     queryKey: ["/api/projects"],
@@ -179,48 +259,68 @@ export default function ProjectsPage() {
         <div className="space-y-3">
           {projects.map((project) => {
             const isExpanded = expandedId === project.id;
+            const isEditing = editingProjectId === project.id;
             return (
               <Card key={project.id} className="overflow-visible" data-testid={`card-project-${project.id}`}>
-                <div
-                  className="p-4 cursor-pointer hover-elevate rounded-md"
-                  onClick={() => toggleProject(project.id)}
-                  data-testid={`button-expand-project-${project.id}`}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="flex-shrink-0 text-muted-foreground">
-                      {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-3 flex-wrap">
-                        <h3 className="font-semibold text-sm" data-testid={`text-project-name-${project.id}`}>{project.name}</h3>
-                        <Badge variant="outline" className="text-xs no-default-active-elevate">{project.projectType}</Badge>
+                {isEditing ? (
+                  <ProjectEditForm
+                    key={project.id}
+                    project={project}
+                    onCancel={() => setEditingProjectId(null)}
+                    onSaved={() => setEditingProjectId(null)}
+                  />
+                ) : (
+                  <div
+                    className="p-4 cursor-pointer hover-elevate rounded-md"
+                    onClick={() => toggleProject(project.id)}
+                    data-testid={`button-expand-project-${project.id}`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="flex-shrink-0 text-muted-foreground">
+                        {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                       </div>
-                      {project.description && (
-                        <p className="text-xs text-muted-foreground line-clamp-1 mt-1 leading-relaxed">
-                          {project.description}
-                        </p>
-                      )}
-                    </div>
-                    <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground flex-shrink-0">
-                      {project.projectManager && (
-                        <span className="flex items-center gap-1">
-                          <User className="w-3.5 h-3.5" />
-                          {project.projectManager}
-                        </span>
-                      )}
-                      {project.closeDate && (
-                        <span className="flex items-center gap-1">
-                          <CalendarDays className="w-3.5 h-3.5" />
-                          {formatUKDate(project.closeDate)}
-                        </span>
-                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <h3 className="font-semibold text-sm" data-testid={`text-project-name-${project.id}`}>{project.name}</h3>
+                          <Badge variant="outline" className="text-xs no-default-active-elevate">{project.projectType}</Badge>
+                        </div>
+                        {project.description && (
+                          <p className="text-xs text-muted-foreground line-clamp-1 mt-1 leading-relaxed">
+                            {project.description}
+                          </p>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground flex-shrink-0">
+                        {project.projectManager && (
+                          <span className="flex items-center gap-1">
+                            <User className="w-3.5 h-3.5" />
+                            {project.projectManager}
+                          </span>
+                        )}
+                        {project.closeDate && (
+                          <span className="flex items-center gap-1">
+                            <CalendarDays className="w-3.5 h-3.5" />
+                            {formatUKDate(project.closeDate)}
+                          </span>
+                        )}
+                        {isAdminUser && (
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={(e) => { e.stopPropagation(); setEditingProjectId(project.id); }}
+                            data-testid={`button-edit-project-${project.id}`}
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-                {isExpanded && (
+                )}
+                {isExpanded && !isEditing && (
                   <div className="px-4 pb-4">
                     <Separator />
-                    <ProjectLessons projectId={project.id} />
+                    <ProjectLessons projectId={project.id} isAdmin={isAdminUser} />
                   </div>
                 )}
               </Card>

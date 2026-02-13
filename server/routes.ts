@@ -49,6 +49,46 @@ export async function registerRoutes(
     }
   });
 
+  app.patch("/api/projects/:id", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid project ID" });
+      const { name, projectType, closeDate, projectManager, description } = req.body;
+      const updateData: any = {};
+      if (name !== undefined) updateData.name = name;
+      if (projectType !== undefined) updateData.projectType = projectType;
+      if (closeDate !== undefined) updateData.closeDate = closeDate;
+      if (projectManager !== undefined) updateData.projectManager = projectManager;
+      if (description !== undefined) updateData.description = description;
+      const updated = await storage.updateProject(id, updateData);
+      if (!updated) return res.status(404).json({ message: "Project not found" });
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating project:", error);
+      res.status(500).json({ message: "Failed to update project" });
+    }
+  });
+
+  app.patch("/api/lessons/:id", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid lesson ID" });
+      const { name, eventDescription, keyLearningOrAction, phase, impactId } = req.body;
+      const updateData: any = {};
+      if (name !== undefined) updateData.name = name;
+      if (eventDescription !== undefined) updateData.eventDescription = eventDescription;
+      if (keyLearningOrAction !== undefined) updateData.keyLearningOrAction = keyLearningOrAction;
+      if (phase !== undefined) updateData.phase = phase;
+      if (impactId !== undefined) updateData.impactId = impactId;
+      const updated = await storage.updateLesson(id, updateData);
+      if (!updated) return res.status(404).json({ message: "Lesson not found" });
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating lesson:", error);
+      res.status(500).json({ message: "Failed to update lesson" });
+    }
+  });
+
   app.get("/api/categories", isAuthenticated, async (_req, res) => {
     try {
       const categories = await storage.getCategories();

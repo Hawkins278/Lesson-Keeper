@@ -8,6 +8,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { ChevronDown, ChevronRight, AlertTriangle, CheckCircle2, TrendingDown, List } from "lucide-react";
 import { Filters, type FilterState } from "@/components/filters";
 import { LessonDetailDialog } from "@/components/lesson-detail-dialog";
+import { useAuth } from "@/hooks/use-auth";
 import type { Lesson, Project, LessonCategory, LessonSubcategory, ReferenceValue, ImpactLevel } from "@shared/schema";
 
 interface LessonWithRelations extends Lesson {
@@ -52,6 +53,9 @@ function getScoreBarColor(score: number) {
 }
 
 export default function Dashboard() {
+  const { user } = useAuth();
+  const userRole = (user?.role as string || "").toLowerCase().trim();
+  const isAdminUser = userRole === "admin" || userRole === "superadmin" || userRole === "superadministrator";
   const [activeTab, setActiveTab] = useState<TabType>("could-be-better");
   const [filters, setFilters] = useState<FilterState>({
     projectType: null,
@@ -343,6 +347,7 @@ export default function Dashboard() {
         lesson={selectedLesson}
         open={!!selectedLesson}
         onOpenChange={(open) => !open && setSelectedLesson(null)}
+        isAdmin={isAdminUser}
       />
     </div>
   );
