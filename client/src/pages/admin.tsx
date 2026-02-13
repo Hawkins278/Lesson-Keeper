@@ -191,16 +191,16 @@ export default function AdminPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [superadminEmail, setSuperadminEmail] = useState("");
+  const [adminEmail, setAdminEmail] = useState("");
 
   const currentUserRole = user?.role as string;
-  const isSuperadmin = currentUserRole === "superadmin";
+  const isCurrentAdmin = currentUserRole === "admin";
 
   const { data: refData, isLoading: refLoading } = useQuery<ReferenceData>({
     queryKey: ["/api/reference-data"],
   });
 
-  const { data: adminData, isLoading: adminLoading } = useQuery<{ superadmins: User[] }>({
+  const { data: adminData, isLoading: adminLoading } = useQuery<{ admins: User[] }>({
     queryKey: ["/api/admin/users"],
   });
 
@@ -230,32 +230,32 @@ export default function AdminPage() {
     },
   });
 
-  const addSuperadminMutation = useMutation({
+  const addAdminMutation = useMutation({
     mutationFn: async (email: string) => {
-      const res = await apiRequest("POST", "/api/admin/superadmin", { email });
+      const res = await apiRequest("POST", "/api/admin/add", { email });
       return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
-      setSuperadminEmail("");
-      toast({ title: "Success", description: "Superadministrator added" });
+      setAdminEmail("");
+      toast({ title: "Success", description: "Admin added" });
     },
     onError: (error: any) => {
-      toast({ title: "Error", description: error.message || "Failed to add superadministrator", variant: "destructive" });
+      toast({ title: "Error", description: error.message || "Failed to add admin", variant: "destructive" });
     },
   });
 
-  const removeSuperadminMutation = useMutation({
+  const removeAdminMutation = useMutation({
     mutationFn: async (userId: string) => {
-      const res = await apiRequest("DELETE", `/api/admin/superadmin/${userId}`);
+      const res = await apiRequest("DELETE", `/api/admin/remove/${userId}`);
       return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
-      toast({ title: "Success", description: "Superadministrator removed" });
+      toast({ title: "Success", description: "Admin removed" });
     },
     onError: (error: any) => {
-      toast({ title: "Error", description: error.message || "Failed to remove superadministrator", variant: "destructive" });
+      toast({ title: "Error", description: error.message || "Failed to remove admin", variant: "destructive" });
     },
   });
 
@@ -276,7 +276,7 @@ export default function AdminPage() {
     }
   };
 
-  if (currentUserRole !== "superadmin") {
+  if (!isCurrentAdmin) {
     return (
       <div className="flex items-center justify-center h-full">
         <p className="text-muted-foreground">You do not have access to this page.</p>
@@ -288,7 +288,7 @@ export default function AdminPage() {
     <div className="max-w-4xl mx-auto p-6 space-y-8">
       <div>
         <h1 className="text-2xl font-serif font-bold" data-testid="text-admin-title">Administration</h1>
-        <p className="text-muted-foreground mt-1">Manage reference data and superadministrator accounts.</p>
+        <p className="text-muted-foreground mt-1">Manage reference data and admin accounts.</p>
       </div>
 
       <Card className="p-6">
@@ -352,54 +352,54 @@ export default function AdminPage() {
       <Card className="p-6">
         <div className="flex items-center gap-2 mb-4">
           <ShieldAlert className="w-5 h-5 text-primary" />
-          <h2 className="text-lg font-semibold" data-testid="text-superadmin-title">Superadministrator Accounts</h2>
+          <h2 className="text-lg font-semibold" data-testid="text-admin-accounts-title">Admin Accounts</h2>
         </div>
         <p className="text-sm text-muted-foreground mb-1">
-          Superadministrators have full access including reference data management and user administration.
+          Admins have full access including reference data management, lesson uploads, and user administration.
         </p>
         <p className="text-sm text-muted-foreground mb-4">
-          There must always be at least 2 superadministrators. Each must have an email and ID.
+          There must always be at least 2 admins. Each must have an email and ID.
         </p>
 
         {adminLoading ? (
           <Skeleton className="h-16 w-full" />
         ) : (
           <div>
-            {adminData?.superadmins && adminData.superadmins.length > 0 ? (
+            {adminData?.admins && adminData.admins.length > 0 ? (
               <div className="divide-y">
-                {adminData.superadmins.map((sa) => (
+                {adminData.admins.map((admin) => (
                   <UserCard
-                    key={sa.id}
-                    user={sa}
-                    canRemove={adminData.superadmins.length > 2}
-                    onRemove={() => removeSuperadminMutation.mutate(sa.id)}
+                    key={admin.id}
+                    user={admin}
+                    canRemove={adminData.admins.length > 2}
+                    onRemove={() => removeAdminMutation.mutate(admin.id)}
                   />
                 ))}
               </div>
             ) : (
-              <p className="text-sm text-muted-foreground italic py-2">No superadministrator accounts.</p>
+              <p className="text-sm text-muted-foreground italic py-2">No admin accounts.</p>
             )}
             <div className="flex items-center gap-2 mt-4 flex-wrap">
               <Input
-                placeholder="Enter user email to add as superadministrator..."
-                value={superadminEmail}
-                onChange={(e) => setSuperadminEmail(e.target.value)}
+                placeholder="Enter user email to add as admin..."
+                value={adminEmail}
+                onChange={(e) => setAdminEmail(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && superadminEmail.trim()) {
-                    addSuperadminMutation.mutate(superadminEmail.trim());
+                  if (e.key === "Enter" && adminEmail.trim()) {
+                    addAdminMutation.mutate(adminEmail.trim());
                   }
                 }}
                 className="flex-1"
-                data-testid="input-add-superadmin-email"
+                data-testid="input-add-admin-email"
               />
               <Button
                 variant="outline"
-                onClick={() => addSuperadminMutation.mutate(superadminEmail.trim())}
-                disabled={addSuperadminMutation.isPending || !superadminEmail.trim()}
-                data-testid="button-add-superadmin"
+                onClick={() => addAdminMutation.mutate(adminEmail.trim())}
+                disabled={addAdminMutation.isPending || !adminEmail.trim()}
+                data-testid="button-add-admin"
               >
-                {addSuperadminMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
-                Add Superadministrator
+                {addAdminMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
+                Add Admin
               </Button>
             </div>
           </div>

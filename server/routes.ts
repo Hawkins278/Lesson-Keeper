@@ -9,12 +9,12 @@ import type { UserRole } from "@shared/models/auth";
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
-const isSuperadmin: RequestHandler = async (req: any, res, next) => {
+const isAdmin: RequestHandler = async (req: any, res, next) => {
   const userId = req.user?.claims?.sub;
   if (!userId) return res.status(401).json({ message: "Unauthorized" });
   const user = await storage.getUserById(userId);
-  if (!user || user.role !== "superadmin") {
-    return res.status(403).json({ message: "Forbidden: superadmin access required" });
+  if (!user || user.role !== "admin") {
+    return res.status(403).json({ message: "Forbidden: admin access required" });
   }
   (req as any).dbUser = user;
   next();
@@ -103,7 +103,7 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/reference-data/:type", isAuthenticated, isSuperadmin, async (req: any, res) => {
+  app.post("/api/reference-data/:type", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
       const { type } = req.params;
       const { value } = req.body;
@@ -145,7 +145,7 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/reference-data/:type/:id", isAuthenticated, isSuperadmin, async (req: any, res) => {
+  app.delete("/api/reference-data/:type/:id", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
       const { type, id } = req.params;
       const numId = Number(id);
@@ -572,17 +572,17 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/admin/users", isAuthenticated, isSuperadmin, async (req: any, res) => {
+  app.get("/api/admin/users", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
-      const superadmins = await storage.getUsersByRole("superadmin");
-      res.json({ superadmins });
+      const admins = await storage.getUsersByRole("admin");
+      res.json({ admins });
     } catch (error) {
       console.error("Error fetching admin users:", error);
       res.status(500).json({ message: "Failed to fetch admin users" });
     }
   });
 
-  app.post("/api/admin/superadmin", isAuthenticated, isSuperadmin, async (req: any, res) => {
+  app.post("/api/admin/add", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
       const { email } = req.body;
       if (!email) return res.status(400).json({ message: "Email is required" });
@@ -590,36 +590,36 @@ export async function registerRoutes(
       const targetUser = await storage.getUserByEmail(email);
       if (!targetUser) return res.status(404).json({ message: "No user found with that email. They must log in at least once first." });
 
-      if (targetUser.role === "superadmin") {
-        return res.status(409).json({ message: "User is already a superadministrator" });
+      if (targetUser.role === "admin") {
+        return res.status(409).json({ message: "User is already an admin" });
       }
 
-      const updated = await storage.setUserRole(targetUser.id, "superadmin");
+      const updated = await storage.setUserRole(targetUser.id, "admin");
       res.json(updated);
     } catch (error) {
-      console.error("Error adding superadmin:", error);
-      res.status(500).json({ message: "Failed to add superadministrator" });
+      console.error("Error adding admin:", error);
+      res.status(500).json({ message: "Failed to add admin" });
     }
   });
 
-  app.delete("/api/admin/superadmin/:userId", isAuthenticated, isSuperadmin, async (req: any, res) => {
+  app.delete("/api/admin/remove/:userId", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
       const { userId } = req.params;
       const targetUser = await storage.getUserById(userId);
-      if (!targetUser || targetUser.role !== "superadmin") {
-        return res.status(404).json({ message: "Superadministrator not found" });
+      if (!targetUser || targetUser.role !== "admin") {
+        return res.status(404).json({ message: "Admin not found" });
       }
 
-      const superadminCount = await storage.countUsersByRole("superadmin");
-      if (superadminCount <= 2) {
-        return res.status(400).json({ message: "Cannot remove superadministrator. There must always be at least 2 superadministrators." });
+      const adminCount = await storage.countUsersByRole("admin");
+      if (adminCount <= 2) {
+        return res.status(400).json({ message: "Cannot remove admin. There must always be at least 2 admins." });
       }
 
       const updated = await storage.setUserRole(userId, "user");
       res.json(updated);
     } catch (error) {
-      console.error("Error removing superadmin:", error);
-      res.status(500).json({ message: "Failed to remove superadministrator" });
+      console.error("Error removing admin:", error);
+      res.status(500).json({ message: "Failed to remove admin" });
     }
   });
 

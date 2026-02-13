@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/use-auth";
 import { isUnauthorizedError } from "@/lib/auth-utils";
 import { Upload, Download, FileSpreadsheet, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
 
@@ -23,11 +24,20 @@ interface UploadResult {
 }
 
 export default function UploadPage() {
+  const { user } = useAuth();
   const [file, setFile] = useState<File | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [result, setResult] = useState<UploadResult | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  if (user?.role !== "admin") {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <p className="text-muted-foreground">You do not have access to this page.</p>
+      </div>
+    );
+  }
 
   const uploadMutation = useMutation({
     mutationFn: async (file: File) => {

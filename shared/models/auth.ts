@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { index, jsonb, pgTable, timestamp, varchar } from "drizzle-orm/pg-core";
 
-export type UserRole = "user" | "superadmin";
+export type UserRole = "user" | "admin";
 
 // Session storage table.
 // (IMPORTANT) This table is mandatory for Replit Auth, don't drop it.

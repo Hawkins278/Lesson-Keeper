@@ -18,17 +18,19 @@ import { Button } from "@/components/ui/button";
 import type { User } from "@shared/models/auth";
 
 const ROLE_LABELS: Record<string, string> = {
-  superadmin: "Superadministrator",
+  admin: "Admin",
   user: "User",
 };
 
-const navItems = [
+const userNavItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Projects", url: "/projects", icon: FolderOpen },
-  { title: "Upload Lessons", url: "/upload", icon: Upload },
 ];
 
-const adminNavItem = { title: "Administration", url: "/admin", icon: Settings };
+const adminOnlyNavItems = [
+  { title: "Upload Lessons", url: "/upload", icon: Upload },
+  { title: "Administration", url: "/admin", icon: Settings },
+];
 
 interface AppSidebarProps {
   user: User | null;
@@ -36,14 +38,14 @@ interface AppSidebarProps {
 
 export function AppSidebar({ user }: AppSidebarProps) {
   const [location] = useLocation();
-  const isAdminUser = user?.role === "superadmin";
+  const isAdminUser = user?.role === "admin";
 
   const initials = user
     ? `${(user.firstName || "")[0] || ""}${(user.lastName || "")[0] || ""}`.toUpperCase() || "U"
     : "U";
 
   const roleLabel = ROLE_LABELS[user?.role || "user"] || "User";
-  const allNavItems = isAdminUser ? [...navItems, adminNavItem] : navItems;
+  const allNavItems = isAdminUser ? [...userNavItems, ...adminOnlyNavItems] : userNavItems;
 
   return (
     <Sidebar>
