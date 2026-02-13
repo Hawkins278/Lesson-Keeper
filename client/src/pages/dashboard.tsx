@@ -124,7 +124,7 @@ export default function Dashboard() {
           const now = new Date();
           const lastUpdate = sub.lastScoreUpdatedAt ? new Date(sub.lastScoreUpdatedAt) : now;
           const daysSince = Math.floor((now.getTime() - lastUpdate.getTime()) / (1000 * 60 * 60 * 24));
-          const effectiveScore = Math.max(0, (sub.currentScore || 0) - daysSince);
+          const effectiveScore = Math.round(Math.max(0, (sub.currentScore || 0) - daysSince));
 
           groups.set(sub.id, {
             subcategory: sub,
