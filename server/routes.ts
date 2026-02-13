@@ -99,6 +99,29 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/public/top-subcategories", async (_req, res) => {
+    try {
+      const subcategories = await storage.getSubcategories();
+      const categories = await storage.getCategories();
+      const catMap = new Map(categories.map(c => [c.id, c]));
+      const now = new Date();
+      const scored = subcategories
+        .map(sub => {
+          const lastUpdate = sub.lastScoreUpdatedAt ? new Date(sub.lastScoreUpdatedAt) : now;
+          const daysSince = Math.floor((now.getTime() - lastUpdate.getTime()) / (1000 * 60 * 60 * 24));
+          const effectiveScore = Math.round(Math.max(0, (sub.currentScore || 0) - daysSince));
+          return { id: sub.id, name: sub.name, categoryName: catMap.get(sub.categoryId)?.name || "", effectiveScore };
+        })
+        .filter(s => s.effectiveScore > 0)
+        .sort((a, b) => b.effectiveScore - a.effectiveScore)
+        .slice(0, 3);
+      res.json(scored);
+    } catch (error) {
+      console.error("Error fetching top subcategories:", error);
+      res.status(500).json({ message: "Failed to fetch top subcategories" });
+    }
+  });
+
   app.get("/api/subcategories", isAuthenticated, async (_req, res) => {
     try {
       const subcategories = await storage.getSubcategories();
