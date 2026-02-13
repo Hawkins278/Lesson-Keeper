@@ -12,7 +12,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/use-auth";
-import { Plus, X, Loader2, Shield, ShieldAlert, Download, Gauge, Pencil, Check, Lock, Info } from "lucide-react";
+import { Plus, X, Loader2, Shield, ShieldAlert, Download, Gauge, Pencil, Check, Lock, Info, Users, Trash2 } from "lucide-react";
 import type { User } from "@shared/models/auth";
 import type { ImpactLevel } from "@shared/schema";
 
@@ -483,6 +483,35 @@ function ImpactLevelsSection({ usage }: { usage: Record<number, number> }) {
   );
 }
 
+function hasAdminRoleFn(role: string | null | undefined): boolean {
+  if (!role) return false;
+  const normalized = role.toLowerCase().trim();
+  return normalized === "admin" || normalized === "superadmin" || normalized === "superadministrator";
+}
+
+function UserRemoveButton({ userId, onRemove, isPending }: { userId: string; onRemove: () => void; isPending: boolean }) {
+  const [confirming, setConfirming] = useState(false);
+
+  return (
+    <div className="flex items-center gap-2 flex-shrink-0 invisible group-hover:visible">
+      {confirming ? (
+        <>
+          <Button size="sm" variant="ghost" onClick={() => setConfirming(false)} data-testid={`button-cancel-remove-user-${userId}`}>
+            Cancel
+          </Button>
+          <Button size="sm" variant="destructive" onClick={() => { onRemove(); setConfirming(false); }} disabled={isPending} data-testid={`button-confirm-remove-user-${userId}`}>
+            {isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Confirm"}
+          </Button>
+        </>
+      ) : (
+        <Button size="icon" variant="ghost" onClick={() => setConfirming(true)} data-testid={`button-remove-user-${userId}`}>
+          <Trash2 className="w-4 h-4 text-muted-foreground" />
+        </Button>
+      )}
+    </div>
+  );
+}
+
 function UserCard({ user, onRemove, canRemove }: { user: User; onRemove?: () => void; canRemove: boolean }) {
   const [confirming, setConfirming] = useState(false);
   const initials = `${(user.firstName || "")[0] || ""}${(user.lastName || "")[0] || ""}`.toUpperCase() || "U";
@@ -544,6 +573,9 @@ export default function AdminPage() {
   const queryClient = useQueryClient();
   const [adminEmail, setAdminEmail] = useState("");
 
+  const [newUserId, setNewUserId] = useState("");
+  const [newUserEmail, setNewUserEmail] = useState("");
+
   const currentUserRole = user?.role as string;
   const isCurrentAdmin = currentUserRole === "admin" || currentUserRole === "superadmin" || currentUserRole === "superadministrator";
 
@@ -557,6 +589,10 @@ export default function AdminPage() {
 
   const { data: adminData, isLoading: adminLoading } = useQuery<{ admins: User[] }>({
     queryKey: ["/api/admin/users"],
+  });
+
+  const { data: allUsersData, isLoading: usersLoading } = useQuery<{ users: User[] }>({
+    queryKey: ["/api/admin/all-users"],
   });
 
   const addMutation = useMutation({
@@ -631,6 +667,53 @@ export default function AdminPage() {
       toast({ title: "Error", description: error.message || "Failed to remove admin", variant: "destructive" });
     },
   });
+
+  const addUserMutation = useMutation({
+    mutationFn: async ({ userId, email }: { userId: string; email?: string }) => {
+      const res = await apiRequest("POST", "/api/admin/users", { userId, email });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/all-users"] });
+      setNewUserId("");
+      setNewUserEmail("");
+      toast({ title: "Success", description: "User added" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to add user", variant: "destructive" });
+    },
+  });
+
+  const removeUserMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const res = await apiRequest("DELETE", `/api/admin/users/${userId}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/all-users"] });
+      toast({ title: "Success", description: "User removed" });
+    },
+    onError: (error: any) => {
+      toast({ title: "Error", description: error.message || "Failed to remove user", variant: "destructive" });
+    },
+  });
+
+  const handleDownloadUsers = async () => {
+    try {
+      const res = await fetch("/api/admin/users/download", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to download");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "users-list.csv";
+      a.click();
+      URL.revokeObjectURL(url);
+      toast({ title: "Downloaded", description: "User list has been saved as CSV." });
+    } catch {
+      toast({ title: "Error", description: "Failed to download user list", variant: "destructive" });
+    }
+  };
 
   const handleDownloadTemplate = async () => {
     try {
@@ -797,6 +880,104 @@ export default function AdminPage() {
               >
                 {addAdminMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
                 Add Admin
+              </Button>
+            </div>
+          </div>
+        )}
+      </Card>
+
+      <Card className="p-6">
+        <div className="flex flex-wrap items-center justify-between gap-4 mb-4">
+          <div className="flex items-center gap-2">
+            <Users className="w-5 h-5 text-primary" />
+            <h2 className="text-lg font-semibold" data-testid="text-user-management-title">User Management</h2>
+          </div>
+          <Button variant="outline" onClick={handleDownloadUsers} data-testid="button-download-users">
+            <Download className="w-4 h-4 mr-2" />
+            Download User List
+          </Button>
+        </div>
+        <p className="text-sm text-muted-foreground mb-4">
+          Add or remove user IDs from the system. Admin users cannot be deleted here — demote them first from the Admin Accounts section above.
+        </p>
+
+        {usersLoading ? (
+          <Skeleton className="h-16 w-full" />
+        ) : (
+          <div>
+            <div className="text-xs text-muted-foreground mb-2">
+              {allUsersData?.users?.length || 0} user(s) total
+            </div>
+            {allUsersData?.users && allUsersData.users.length > 0 ? (
+              <div className="divide-y max-h-80 overflow-y-auto">
+                {allUsersData.users.map((u) => {
+                  const isAdminUser = hasAdminRoleFn(u.role);
+                  const isSelf = user?.id === u.id;
+                  const initials = `${(u.firstName || "")[0] || ""}${(u.lastName || "")[0] || ""}`.toUpperCase() || "U";
+
+                  return (
+                    <div key={u.id} className="flex items-center justify-between gap-3 py-2 group" data-testid={`row-user-${u.id}`}>
+                      <div className="flex items-center gap-3 min-w-0">
+                        <Avatar className="h-8 w-8 flex-shrink-0">
+                          <AvatarImage src={u.profileImageUrl || undefined} />
+                          <AvatarFallback className="text-xs">{initials}</AvatarFallback>
+                        </Avatar>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="text-sm font-medium truncate" data-testid={`text-user-name-${u.id}`}>
+                              {u.firstName || u.lastName ? `${u.firstName || ""} ${u.lastName || ""}`.trim() : u.id}
+                            </p>
+                            {isAdminUser && (
+                              <Badge variant="secondary" className="text-[10px] no-default-active-elevate" data-testid={`badge-admin-${u.id}`}>
+                                Admin
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="text-xs text-muted-foreground truncate" data-testid={`text-user-email-${u.id}`}>
+                            {u.email || u.id}
+                          </p>
+                        </div>
+                      </div>
+                      {!isAdminUser && !isSelf && (
+                        <UserRemoveButton userId={u.id} onRemove={() => removeUserMutation.mutate(u.id)} isPending={removeUserMutation.isPending} />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground italic py-2">No users in the system.</p>
+            )}
+            <div className="flex items-center gap-2 mt-4 flex-wrap">
+              <Input
+                placeholder="User ID..."
+                value={newUserId}
+                onChange={(e) => setNewUserId(e.target.value)}
+                className="flex-1 min-w-[140px]"
+                data-testid="input-add-user-id"
+              />
+              <Input
+                placeholder="Email (optional)..."
+                value={newUserEmail}
+                onChange={(e) => setNewUserEmail(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && newUserId.trim()) {
+                    addUserMutation.mutate({ userId: newUserId.trim(), email: newUserEmail.trim() || undefined });
+                  }
+                }}
+                className="flex-1 min-w-[180px]"
+                data-testid="input-add-user-email"
+              />
+              <Button
+                variant="outline"
+                onClick={() => {
+                  if (newUserId.trim()) addUserMutation.mutate({ userId: newUserId.trim(), email: newUserEmail.trim() || undefined });
+                }}
+                disabled={addUserMutation.isPending || !newUserId.trim()}
+                data-testid="button-add-user"
+              >
+                {addUserMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
+                Add User
               </Button>
             </div>
           </div>

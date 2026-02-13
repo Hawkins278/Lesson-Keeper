@@ -804,5 +804,81 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/admin/all-users", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const allUsers = await storage.getAllUsers();
+      res.json({ users: allUsers });
+    } catch (error) {
+      console.error("Error fetching all users:", error);
+      res.status(500).json({ message: "Failed to fetch users" });
+    }
+  });
+
+  app.post("/api/admin/users", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const { userId, email } = req.body;
+      if (!userId || typeof userId !== "string" || !userId.trim()) {
+        return res.status(400).json({ message: "User ID is required" });
+      }
+      const trimmedId = userId.trim();
+      const existing = await storage.getUserById(trimmedId);
+      if (existing) {
+        return res.status(409).json({ message: "A user with this ID already exists" });
+      }
+      const newUser = await storage.createUserById(trimmedId, email?.trim() || undefined);
+      res.json(newUser);
+    } catch (error) {
+      console.error("Error creating user:", error);
+      res.status(500).json({ message: "Failed to create user" });
+    }
+  });
+
+  app.delete("/api/admin/users/:userId", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const { userId } = req.params;
+      const targetUser = await storage.getUserById(userId);
+      if (!targetUser) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      if (hasAdminRole(targetUser.role)) {
+        return res.status(400).json({ message: "Cannot delete an admin user. Demote them first." });
+      }
+      if (req.user?.claims?.sub === userId) {
+        return res.status(400).json({ message: "Cannot delete your own account" });
+      }
+      await storage.deleteUser(userId);
+      res.json({ message: "User removed" });
+    } catch (error) {
+      console.error("Error deleting user:", error);
+      res.status(500).json({ message: "Failed to delete user" });
+    }
+  });
+
+  app.get("/api/admin/users/download", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const allUsers = await storage.getAllUsers();
+      const csvRows = ["UserID,Email,FirstName,LastName,Role,IsAdmin,CreatedAt"];
+      for (const u of allUsers) {
+        const isAdmin = hasAdminRole(u.role);
+        csvRows.push([
+          `"${(u.id || "").replace(/"/g, '""')}"`,
+          `"${(u.email || "").replace(/"/g, '""')}"`,
+          `"${(u.firstName || "").replace(/"/g, '""')}"`,
+          `"${(u.lastName || "").replace(/"/g, '""')}"`,
+          `"${u.role}"`,
+          isAdmin ? "Yes" : "No",
+          u.createdAt ? new Date(u.createdAt).toISOString() : "",
+        ].join(","));
+      }
+      const csv = csvRows.join("\n");
+      res.setHeader("Content-Type", "text/csv");
+      res.setHeader("Content-Disposition", "attachment; filename=users-list.csv");
+      res.send(csv);
+    } catch (error) {
+      console.error("Error downloading users:", error);
+      res.status(500).json({ message: "Failed to download users" });
+    }
+  });
+
   return httpServer;
 }

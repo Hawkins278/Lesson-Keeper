@@ -60,6 +60,7 @@ client/src/components/     - Sidebar, Filters, LessonDetailDialog, ThemeToggle
 - Template generation uses `exceljs` library for styling; upload parsing uses `xlsx` (SheetJS)
 
 ## Recent Changes
+- 2026-02-13: Added User Management section to Admin page: add/remove user IDs, download all users as CSV (with admin flag)
 - 2026-02-13: Renamed Superadministrator role to Admin; users can only see Dashboard and Projects
 - 2026-02-12: Added role-based access control (user/admin) with admin page
 - 2026-02-12: Moved reference data management from Upload page to Admin page

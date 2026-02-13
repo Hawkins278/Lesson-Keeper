@@ -60,6 +60,9 @@ export interface IStorage {
   getUserById(userId: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
   countUsersByRole(role: UserRole): Promise<number>;
+  getAllUsers(): Promise<User[]>;
+  createUserById(id: string, email?: string): Promise<User>;
+  deleteUser(userId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -347,6 +350,23 @@ export class DatabaseStorage implements IStorage {
       .from(users)
       .where(sql`lower(${users.role}) in ('admin', 'superadmin', 'superadministrator')`);
     return Number(result.count);
+  }
+
+  async getAllUsers(): Promise<User[]> {
+    return db.select().from(users).orderBy(users.email);
+  }
+
+  async createUserById(id: string, email?: string): Promise<User> {
+    const [user] = await db.insert(users).values({
+      id,
+      email: email || null,
+      role: "user",
+    }).returning();
+    return user;
+  }
+
+  async deleteUser(userId: string): Promise<void> {
+    await db.delete(users).where(eq(users.id, userId));
   }
 }
 
