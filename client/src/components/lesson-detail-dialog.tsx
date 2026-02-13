@@ -6,11 +6,11 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { CalendarDays, FolderOpen, Layers, Tag, User, FileText } from "lucide-react";
-import type { Lesson, Project, LessonCategory, LessonSubcategory } from "@shared/schema";
+import { CalendarDays, FolderOpen, Layers, Tag, User, FileText, Gauge } from "lucide-react";
+import type { Lesson, Project, LessonCategory, LessonSubcategory, ImpactLevel } from "@shared/schema";
 
 interface LessonDetailDialogProps {
-  lesson: (Lesson & { project?: Project; category?: LessonCategory; subcategory?: LessonSubcategory }) | null;
+  lesson: (Lesson & { project?: Project; category?: LessonCategory; subcategory?: LessonSubcategory; impact?: ImpactLevel }) | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -85,6 +85,21 @@ export function LessonDetailDialog({ lesson, open, onOpenChange }: LessonDetailD
               </div>
             </div>
           </div>
+
+          {!isWentWell && lesson.impact && (
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <Gauge className="w-4 h-4 text-muted-foreground" />
+                Impact
+              </div>
+              <div className="ml-6 text-sm">
+                <p data-testid="text-lesson-impact">{lesson.impact.description}</p>
+                <p className="text-xs text-muted-foreground mt-0.5" data-testid="text-lesson-impact-weighting">
+                  Weighting: {lesson.impact.weightingPercent}%
+                </p>
+              </div>
+            </div>
+          )}
 
           {lesson.eventDescription && (
             <div className="space-y-1.5">

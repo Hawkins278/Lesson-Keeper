@@ -8,12 +8,13 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { ChevronDown, ChevronRight, AlertTriangle, CheckCircle2, TrendingDown, List } from "lucide-react";
 import { Filters, type FilterState } from "@/components/filters";
 import { LessonDetailDialog } from "@/components/lesson-detail-dialog";
-import type { Lesson, Project, LessonCategory, LessonSubcategory, ReferenceValue } from "@shared/schema";
+import type { Lesson, Project, LessonCategory, LessonSubcategory, ReferenceValue, ImpactLevel } from "@shared/schema";
 
 interface LessonWithRelations extends Lesson {
   project?: Project;
   category?: LessonCategory;
   subcategory?: LessonSubcategory;
+  impact?: ImpactLevel;
 }
 
 interface SubcategoryGroup {
@@ -40,7 +41,7 @@ function getScoreColor(score: number) {
 }
 
 function getScoreBarWidth(score: number) {
-  return Math.min(100, Math.max(3, (score / 1000) * 100));
+  return Math.min(100, Math.max(3, (score / 1500) * 100));
 }
 
 function getScoreBarColor(score: number) {
@@ -313,6 +314,11 @@ export default function Dashboard() {
                                 </div>
                               </div>
                               <div className="flex items-center gap-2 flex-shrink-0">
+                                {lessonIsCBB && lesson.impact && (
+                                  <Badge variant="outline" className="text-xs flex-shrink-0 no-default-active-elevate" data-testid={`badge-impact-${lesson.id}`}>
+                                    {lesson.impact.weightingPercent}%
+                                  </Badge>
+                                )}
                                 <Badge
                                   className={`text-xs no-default-active-elevate ${lessonIsCBB ? "bg-cbb/15 text-cbb border-cbb/30" : "bg-ww/15 text-ww border-ww/30"}`}
                                   variant="outline"

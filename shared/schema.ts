@@ -42,6 +42,7 @@ export const lessons = pgTable("lessons", {
   name: text("name").notNull(),
   eventDescription: text("event_description"),
   keyLearningOrAction: text("key_learning_or_action"),
+  impactId: integer("impact_id"),
   createdAt: timestamp("created_at").defaultNow(),
   createdByUserId: varchar("created_by_user_id"),
 });
@@ -71,6 +72,17 @@ export const referenceValues = pgTable("reference_values", {
   value: text("value").notNull(),
 });
 
+export const impactLevels = pgTable("impact_levels", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  description: text("description").notNull(),
+  weightingPercent: integer("weighting_percent").notNull().default(100),
+  sortOrder: integer("sort_order").notNull().default(0),
+});
+
 export const insertReferenceValueSchema = createInsertSchema(referenceValues).omit({ id: true });
 export type InsertReferenceValue = z.infer<typeof insertReferenceValueSchema>;
 export type ReferenceValue = typeof referenceValues.$inferSelect;
+
+export const insertImpactLevelSchema = createInsertSchema(impactLevels).omit({ id: true });
+export type InsertImpactLevel = z.infer<typeof insertImpactLevelSchema>;
+export type ImpactLevel = typeof impactLevels.$inferSelect;

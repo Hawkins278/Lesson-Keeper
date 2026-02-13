@@ -6,9 +6,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { FolderOpen, CalendarDays, User, FileText, ChevronDown, ChevronRight, Loader2 } from "lucide-react";
 import { LessonDetailDialog } from "@/components/lesson-detail-dialog";
-import type { Project, Lesson, LessonCategory, LessonSubcategory } from "@shared/schema";
+import type { Project, Lesson, LessonCategory, LessonSubcategory, ImpactLevel } from "@shared/schema";
 
-type EnrichedLesson = Lesson & { category?: LessonCategory; subcategory?: LessonSubcategory };
+type EnrichedLesson = Lesson & { category?: LessonCategory; subcategory?: LessonSubcategory; impact?: ImpactLevel };
 
 interface CategoryGroup {
   category: LessonCategory;
@@ -98,19 +98,25 @@ function ProjectLessons({ projectId }: { projectId: number }) {
                       onClick={() => setSelectedLesson(lesson)}
                       data-testid={`card-lesson-${lesson.id}`}
                     >
-                      <Badge
-                        variant={isWentWell ? "default" : "destructive"}
-                        className="text-xs flex-shrink-0 mt-0.5 no-default-active-elevate"
-                      >
-                        {isWentWell ? "Went Well" : "Could Be Better"}
-                      </Badge>
+                      <div className={`w-1 self-stretch rounded-full flex-shrink-0 ${isWentWell ? "bg-ww" : "bg-cbb"}`} />
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-medium truncate" data-testid={`text-lesson-name-${lesson.id}`}><span className="text-muted-foreground font-mono mr-1.5">#{lesson.id}</span>{lesson.name}</p>
                         {lesson.eventDescription && (
                           <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">{lesson.eventDescription}</p>
                         )}
                         <div className="flex flex-wrap items-center gap-2 mt-1.5">
+                          <Badge
+                            className={`text-xs no-default-active-elevate ${isWentWell ? "bg-ww/15 text-ww border-ww/30" : "bg-cbb/15 text-cbb border-cbb/30"}`}
+                            variant="outline"
+                          >
+                            {isWentWell ? "WW" : "CBB"}
+                          </Badge>
                           <Badge variant="outline" className="text-xs no-default-active-elevate">{lesson.phase}</Badge>
+                          {!isWentWell && lesson.impact && (
+                            <Badge variant="outline" className="text-xs no-default-active-elevate" data-testid={`badge-impact-${lesson.id}`}>
+                              {lesson.impact.weightingPercent}%
+                            </Badge>
+                          )}
                         </div>
                       </div>
                     </div>

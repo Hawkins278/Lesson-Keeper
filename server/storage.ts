@@ -4,8 +4,9 @@ import {
   type LessonSubcategory, type InsertLessonSubcategory,
   type Lesson, type InsertLesson,
   type ReferenceValue, type InsertReferenceValue,
+  type ImpactLevel, type InsertImpactLevel,
   type User, type UserRole,
-  projects, lessonCategories, lessonSubcategories, lessons, referenceValues, users,
+  projects, lessonCategories, lessonSubcategories, lessons, referenceValues, impactLevels, users,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, sql, ne, or, inArray } from "drizzle-orm";
@@ -26,8 +27,8 @@ export interface IStorage {
   updateSubcategoryScore(id: number, score: number, lastUpdated: Date): Promise<void>;
   createSubcategoryFirstRecorded(id: number, date: Date): Promise<void>;
 
-  getLessons(): Promise<(Lesson & { project?: Project; category?: LessonCategory; subcategory?: LessonSubcategory })[]>;
-  getLessonsByProject(projectId: number): Promise<(Lesson & { category?: LessonCategory; subcategory?: LessonSubcategory })[]>;
+  getLessons(): Promise<(Lesson & { project?: Project; category?: LessonCategory; subcategory?: LessonSubcategory; impact?: ImpactLevel })[]>;
+  getLessonsByProject(projectId: number): Promise<(Lesson & { category?: LessonCategory; subcategory?: LessonSubcategory; impact?: ImpactLevel })[]>;
   getLesson(id: number): Promise<Lesson | undefined>;
   createLesson(lesson: InsertLesson): Promise<Lesson>;
 
@@ -38,6 +39,13 @@ export interface IStorage {
   hasDependentLessonsForSubcategory(subcategoryId: number): Promise<boolean>;
   deleteCategory(id: number): Promise<void>;
   deleteSubcategory(id: number): Promise<void>;
+
+  getImpactLevels(): Promise<ImpactLevel[]>;
+  getImpactLevel(id: number): Promise<ImpactLevel | undefined>;
+  createImpactLevel(level: InsertImpactLevel): Promise<ImpactLevel>;
+  updateImpactLevel(id: number, data: Partial<InsertImpactLevel>): Promise<ImpactLevel | undefined>;
+  deleteImpactLevel(id: number): Promise<void>;
+  updateLessonImpact(lessonId: number, impactId: number | null): Promise<void>;
 
   getUsersByRole(role: UserRole): Promise<User[]>;
   getUsersByRoles(roles: UserRole[]): Promise<User[]>;
@@ -109,40 +117,47 @@ export class DatabaseStorage implements IStorage {
       .where(eq(lessonSubcategories.id, id));
   }
 
-  async getLessons(): Promise<(Lesson & { project?: Project; category?: LessonCategory; subcategory?: LessonSubcategory })[]> {
+  async getLessons(): Promise<(Lesson & { project?: Project; category?: LessonCategory; subcategory?: LessonSubcategory; impact?: ImpactLevel })[]> {
     const allLessons = await db.select().from(lessons).orderBy(desc(lessons.createdAt));
     const allProjects = await this.getProjects();
     const allCategories = await this.getCategories();
     const allSubcategories = await this.getSubcategories();
+    const allImpacts = await this.getImpactLevels();
 
     const projectMap = new Map(allProjects.map((p) => [p.id, p]));
     const categoryMap = new Map(allCategories.map((c) => [c.id, c]));
     const subcategoryMap = new Map(allSubcategories.map((s) => [s.id, s]));
+    const impactMap = new Map(allImpacts.map((il) => [il.id, il]));
 
     return allLessons.map((lesson) => {
       const subcategory = subcategoryMap.get(lesson.subcategoryId);
       const category = subcategory ? categoryMap.get(subcategory.categoryId) : undefined;
+      const impact = lesson.impactId ? impactMap.get(lesson.impactId) : undefined;
       return {
         ...lesson,
         project: projectMap.get(lesson.projectId),
         category,
         subcategory,
+        impact,
       };
     });
   }
 
-  async getLessonsByProject(projectId: number): Promise<(Lesson & { category?: LessonCategory; subcategory?: LessonSubcategory })[]> {
+  async getLessonsByProject(projectId: number): Promise<(Lesson & { category?: LessonCategory; subcategory?: LessonSubcategory; impact?: ImpactLevel })[]> {
     const projectLessons = await db.select().from(lessons).where(eq(lessons.projectId, projectId)).orderBy(desc(lessons.createdAt));
     const allCategories = await this.getCategories();
     const allSubcategories = await this.getSubcategories();
+    const allImpacts = await this.getImpactLevels();
 
     const categoryMap = new Map(allCategories.map((c) => [c.id, c]));
     const subcategoryMap = new Map(allSubcategories.map((s) => [s.id, s]));
+    const impactMap = new Map(allImpacts.map((il) => [il.id, il]));
 
     return projectLessons.map((lesson) => {
       const subcategory = subcategoryMap.get(lesson.subcategoryId);
       const category = subcategory ? categoryMap.get(subcategory.categoryId) : undefined;
-      return { ...lesson, category, subcategory };
+      const impact = lesson.impactId ? impactMap.get(lesson.impactId) : undefined;
+      return { ...lesson, category, subcategory, impact };
     });
   }
 
@@ -191,6 +206,34 @@ export class DatabaseStorage implements IStorage {
 
   async deleteSubcategory(id: number): Promise<void> {
     await db.delete(lessonSubcategories).where(eq(lessonSubcategories.id, id));
+  }
+
+  async getImpactLevels(): Promise<ImpactLevel[]> {
+    return db.select().from(impactLevels).orderBy(impactLevels.sortOrder);
+  }
+
+  async getImpactLevel(id: number): Promise<ImpactLevel | undefined> {
+    const [level] = await db.select().from(impactLevels).where(eq(impactLevels.id, id));
+    return level;
+  }
+
+  async createImpactLevel(level: InsertImpactLevel): Promise<ImpactLevel> {
+    const [created] = await db.insert(impactLevels).values(level).returning();
+    return created;
+  }
+
+  async updateImpactLevel(id: number, data: Partial<InsertImpactLevel>): Promise<ImpactLevel | undefined> {
+    const [updated] = await db.update(impactLevels).set(data).where(eq(impactLevels.id, id)).returning();
+    return updated;
+  }
+
+  async deleteImpactLevel(id: number): Promise<void> {
+    await db.update(lessons).set({ impactId: null }).where(eq(lessons.impactId, id));
+    await db.delete(impactLevels).where(eq(impactLevels.id, id));
+  }
+
+  async updateLessonImpact(lessonId: number, impactId: number | null): Promise<void> {
+    await db.update(lessons).set({ impactId }).where(eq(lessons.id, lessonId));
   }
 
   async getUsersByRole(role: UserRole): Promise<User[]> {
