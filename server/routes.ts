@@ -397,7 +397,8 @@ export async function registerRoutes(
       const r2 = ws.addRow(["ProjectType", "ProjectName", "ProjectCloseDate", "ProjectManager", "ProjectDescription", "", ""]);
       r2.eachCell((cell) => { cell.fill = colHeaderFill; cell.font = colHeaderFont; cell.border = colHeaderBorder; });
 
-      ws.addRow(["", "", "", "", "", "", ""]);
+      const dataRow = ws.addRow(["", "", "", "", "", "", ""]);
+      dataRow.getCell(3).numFmt = "@";
 
       ws.addRow([]);
 
@@ -522,9 +523,26 @@ export async function registerRoutes(
 
       const errors: ValidationError[] = [];
 
+      const excelSerialToDate = (serial: number): string => {
+        const epoch = new Date(1899, 11, 30);
+        const d = new Date(epoch.getTime() + serial * 86400000);
+        const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+        const day = String(d.getDate()).padStart(2, "0");
+        return `${day}-${months[d.getMonth()]}-${d.getFullYear()}`;
+      };
+
       const cellStr = (row: (string | number | null | undefined)[], col: number): string => {
         const v = row[col];
         return v != null ? String(v).trim() : "";
+      };
+
+      const cellDateStr = (row: (string | number | null | undefined)[], col: number): string => {
+        const v = row[col];
+        if (v == null) return "";
+        if (typeof v === "number" && v > 30000 && v < 100000) {
+          return excelSerialToDate(v);
+        }
+        return String(v).trim();
       };
 
       const isSectionHeader = (row: (string | number | null | undefined)[]): string | null => {
@@ -600,7 +618,7 @@ export async function registerRoutes(
         if (expectingProjectData && !isProjectHeaderRow(row) && !isProjectDetailsHeader(row)) {
           projectType = cellStr(row, 0);
           projectName = cellStr(row, 1);
-          projectCloseDate = cellStr(row, 2);
+          projectCloseDate = cellDateStr(row, 2);
           projectManager = cellStr(row, 3);
           projectDescription = cellStr(row, 4);
           expectingProjectData = false;
