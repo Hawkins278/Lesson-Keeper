@@ -303,7 +303,7 @@ export async function registerRoutes(
       const r2 = ws.addRow(["ProjectType", "ProjectName", "ProjectCloseDate", "ProjectManager", "ProjectDescription", "", ""]);
       r2.eachCell((cell) => { cell.fill = colHeaderFill; cell.font = colHeaderFont; cell.border = colHeaderBorder; });
 
-      ws.addRow(["IT Change", "ERP Migration", "2025-06-30", "Jane Smith", "Migration of legacy ERP system", "", ""]);
+      ws.addRow(["", "", "", "", "", "", ""]);
 
       ws.addRow([]);
 
@@ -316,9 +316,6 @@ export async function registerRoutes(
       const r6 = ws.addRow(["LessonName", "LessonEventDescription", "KeyLearningOrAction", "ProjectPhase", "LessonCategory", "LessonSubcategory", "Impact"]);
       r6.eachCell((cell) => { cell.fill = colHeaderFill; cell.font = colHeaderFont; cell.border = colHeaderBorder; });
 
-      ws.addRow(["Unclear requirements from finance dept", "Finance team was not consulted early enough, leading to rework", "Engage all stakeholders in discovery phase", "Planning", "Governance", "Requirements Clarity", impactNames[0] || ""]);
-      ws.addRow(["Data migration timeline underestimated", "Legacy data cleansing took 3x longer than estimated", "Run data profiling before estimating timelines", "Planning", "Planning", "Timeline Estimation", impactNames[2] || ""]);
-
       ws.addRow([]);
 
       const r10 = ws.addRow(["WENT WELL", "", "", "", "", "", ""]);
@@ -329,8 +326,6 @@ export async function registerRoutes(
 
       const r11 = ws.addRow(["LessonName", "LessonEventDescription", "KeyLearningOrAction", "ProjectPhase", "LessonCategory", "LessonSubcategory", "Impact"]);
       r11.eachCell((cell) => { cell.fill = colHeaderFill; cell.font = colHeaderFont; cell.border = colHeaderBorder; });
-
-      ws.addRow(["Automated regression testing suite", "Team invested in building comprehensive automated tests early", "Allocate 20% of development effort to test automation", "Delivery", "Execution", "Testing & QA", ""]);
 
       const refWs = wb.addWorksheet("Reference Data");
       refWs.columns = [{ width: 28 }, { width: 22 }, { width: 28 }, { width: 28 }, { width: 44 }];
