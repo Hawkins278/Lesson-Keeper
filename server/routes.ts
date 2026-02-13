@@ -816,16 +816,16 @@ export async function registerRoutes(
 
   app.post("/api/admin/users", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
-      const { userId, email } = req.body;
-      if (!userId || typeof userId !== "string" || !userId.trim()) {
-        return res.status(400).json({ message: "User ID is required" });
+      const { email } = req.body;
+      if (!email || typeof email !== "string" || !email.trim()) {
+        return res.status(400).json({ message: "Email is required" });
       }
-      const trimmedId = userId.trim();
-      const existing = await storage.getUserById(trimmedId);
+      const trimmedEmail = email.trim();
+      const existing = await storage.getUserByEmail(trimmedEmail);
       if (existing) {
-        return res.status(409).json({ message: "A user with this ID already exists" });
+        return res.status(409).json({ message: "A user with this email already exists" });
       }
-      const newUser = await storage.createUserById(trimmedId, email?.trim() || undefined);
+      const newUser = await storage.createUserByEmail(trimmedEmail);
       res.json(newUser);
     } catch (error) {
       console.error("Error creating user:", error);
@@ -833,24 +833,28 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/admin/users/:userId", isAuthenticated, isAdmin, async (req: any, res) => {
+  app.delete("/api/admin/users/by-email", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
-      const { userId } = req.params;
-      const targetUser = await storage.getUserById(userId);
+      const { email } = req.body;
+      if (!email || typeof email !== "string" || !email.trim()) {
+        return res.status(400).json({ message: "Email is required" });
+      }
+      const targetUser = await storage.getUserByEmail(email.trim());
       if (!targetUser) {
-        return res.status(404).json({ message: "User not found" });
+        return res.status(404).json({ message: "No user found with that email" });
       }
       if (hasAdminRole(targetUser.role)) {
-        return res.status(400).json({ message: "Cannot delete an admin user. Demote them first." });
+        return res.status(400).json({ message: "Cannot remove an admin user. Demote them first from Admin Accounts." });
       }
-      if (req.user?.claims?.sub === userId) {
-        return res.status(400).json({ message: "Cannot delete your own account" });
+      const currentSub = req.user?.claims?.sub;
+      if (currentSub && targetUser.id === currentSub) {
+        return res.status(400).json({ message: "Cannot remove your own account" });
       }
-      await storage.deleteUser(userId);
+      await storage.deleteUserByEmail(email.trim());
       res.json({ message: "User removed" });
     } catch (error) {
       console.error("Error deleting user:", error);
-      res.status(500).json({ message: "Failed to delete user" });
+      res.status(500).json({ message: "Failed to remove user" });
     }
   });
 

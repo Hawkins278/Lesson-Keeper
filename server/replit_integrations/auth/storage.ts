@@ -37,6 +37,34 @@ class AuthStorage implements IAuthStorage {
       return user;
     }
 
+    if (userData.email) {
+      const [preRegistered] = await db
+        .select()
+        .from(users)
+        .where(sql`lower(${users.email}) = lower(${userData.email})`);
+
+      if (preRegistered) {
+        const existingRole = (preRegistered.role || "").toLowerCase().trim();
+        const normalizedRole = (existingRole === "superadmin" || existingRole === "superadministrator")
+          ? "admin"
+          : preRegistered.role;
+
+        const result = await db.execute(sql`
+          UPDATE users SET
+            id = ${userData.id!},
+            email = ${userData.email},
+            first_name = ${userData.firstName || null},
+            last_name = ${userData.lastName || null},
+            profile_image_url = ${userData.profileImageUrl || null},
+            role = ${normalizedRole},
+            updated_at = NOW()
+          WHERE id = ${preRegistered.id}
+          RETURNING *
+        `);
+        return result.rows[0] as unknown as User;
+      }
+    }
+
     const [adminCount] = await db
       .select({ count: sql<number>`count(*)` })
       .from(users)

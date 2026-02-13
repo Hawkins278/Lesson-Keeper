@@ -61,7 +61,8 @@ export interface IStorage {
   getUserByEmail(email: string): Promise<User | undefined>;
   countUsersByRole(role: UserRole): Promise<number>;
   getAllUsers(): Promise<User[]>;
-  createUserById(id: string, email?: string): Promise<User>;
+  createUserByEmail(email: string): Promise<User>;
+  deleteUserByEmail(email: string): Promise<void>;
   deleteUser(userId: string): Promise<void>;
 }
 
@@ -356,13 +357,16 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(users).orderBy(users.email);
   }
 
-  async createUserById(id: string, email?: string): Promise<User> {
+  async createUserByEmail(email: string): Promise<User> {
     const [user] = await db.insert(users).values({
-      id,
-      email: email || null,
+      email,
       role: "user",
     }).returning();
     return user;
+  }
+
+  async deleteUserByEmail(email: string): Promise<void> {
+    await db.delete(users).where(sql`lower(${users.email}) = lower(${email})`);
   }
 
   async deleteUser(userId: string): Promise<void> {

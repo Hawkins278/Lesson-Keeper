@@ -544,9 +544,8 @@ export default function AdminPage() {
   const queryClient = useQueryClient();
   const [adminEmail, setAdminEmail] = useState("");
 
-  const [newUserId, setNewUserId] = useState("");
   const [newUserEmail, setNewUserEmail] = useState("");
-  const [removeUserId, setRemoveUserId] = useState("");
+  const [removeUserEmail, setRemoveUserEmail] = useState("");
 
   const currentUserRole = user?.role as string;
   const isCurrentAdmin = currentUserRole === "admin" || currentUserRole === "superadmin" || currentUserRole === "superadministrator";
@@ -638,15 +637,14 @@ export default function AdminPage() {
   });
 
   const addUserMutation = useMutation({
-    mutationFn: async ({ userId, email }: { userId: string; email?: string }) => {
-      const res = await apiRequest("POST", "/api/admin/users", { userId, email });
+    mutationFn: async (email: string) => {
+      const res = await apiRequest("POST", "/api/admin/users", { email });
       return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/all-users"] });
-      setNewUserId("");
       setNewUserEmail("");
-      toast({ title: "Success", description: "User added" });
+      toast({ title: "Success", description: "User added. They will be linked to this account when they first log in." });
     },
     onError: (error: any) => {
       toast({ title: "Error", description: error.message || "Failed to add user", variant: "destructive" });
@@ -654,13 +652,13 @@ export default function AdminPage() {
   });
 
   const removeUserMutation = useMutation({
-    mutationFn: async (userId: string) => {
-      const res = await apiRequest("DELETE", `/api/admin/users/${userId}`);
+    mutationFn: async (email: string) => {
+      const res = await apiRequest("DELETE", "/api/admin/users/by-email", { email });
       return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/all-users"] });
-      setRemoveUserId("");
+      setRemoveUserEmail("");
       toast({ title: "Success", description: "User removed" });
     },
     onError: (error: any) => {
@@ -868,7 +866,7 @@ export default function AdminPage() {
           </Button>
         </div>
         <p className="text-sm text-muted-foreground mb-6">
-          Add or remove users by their ID. Download the full user list (CSV) to see all users including admin flags.
+          Add or remove users by email address. When a new user logs in, their account will be linked automatically by their email. Download the full list to see all users with admin status.
         </p>
 
         <div className="space-y-4">
@@ -876,30 +874,24 @@ export default function AdminPage() {
             <p className="text-sm font-medium mb-2">Add User</p>
             <div className="flex items-center gap-2 flex-wrap">
               <Input
-                placeholder="User ID..."
-                value={newUserId}
-                onChange={(e) => setNewUserId(e.target.value)}
-                className="flex-1 min-w-[140px]"
-                data-testid="input-add-user-id"
-              />
-              <Input
-                placeholder="Email (optional)..."
+                type="email"
+                placeholder="Enter user email address..."
                 value={newUserEmail}
                 onChange={(e) => setNewUserEmail(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && newUserId.trim()) {
-                    addUserMutation.mutate({ userId: newUserId.trim(), email: newUserEmail.trim() || undefined });
+                  if (e.key === "Enter" && newUserEmail.trim()) {
+                    addUserMutation.mutate(newUserEmail.trim());
                   }
                 }}
-                className="flex-1 min-w-[180px]"
+                className="flex-1 min-w-[250px]"
                 data-testid="input-add-user-email"
               />
               <Button
                 variant="outline"
                 onClick={() => {
-                  if (newUserId.trim()) addUserMutation.mutate({ userId: newUserId.trim(), email: newUserEmail.trim() || undefined });
+                  if (newUserEmail.trim()) addUserMutation.mutate(newUserEmail.trim());
                 }}
-                disabled={addUserMutation.isPending || !newUserId.trim()}
+                disabled={addUserMutation.isPending || !newUserEmail.trim()}
                 data-testid="button-add-user"
               >
                 {addUserMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
@@ -914,23 +906,24 @@ export default function AdminPage() {
             <p className="text-sm font-medium mb-2">Remove User</p>
             <div className="flex items-center gap-2 flex-wrap">
               <Input
-                placeholder="User ID to remove..."
-                value={removeUserId}
-                onChange={(e) => setRemoveUserId(e.target.value)}
+                type="email"
+                placeholder="Enter user email to remove..."
+                value={removeUserEmail}
+                onChange={(e) => setRemoveUserEmail(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && removeUserId.trim()) {
-                    removeUserMutation.mutate(removeUserId.trim());
+                  if (e.key === "Enter" && removeUserEmail.trim()) {
+                    removeUserMutation.mutate(removeUserEmail.trim());
                   }
                 }}
-                className="flex-1 min-w-[200px]"
-                data-testid="input-remove-user-id"
+                className="flex-1 min-w-[250px]"
+                data-testid="input-remove-user-email"
               />
               <Button
                 variant="outline"
                 onClick={() => {
-                  if (removeUserId.trim()) removeUserMutation.mutate(removeUserId.trim());
+                  if (removeUserEmail.trim()) removeUserMutation.mutate(removeUserEmail.trim());
                 }}
-                disabled={removeUserMutation.isPending || !removeUserId.trim()}
+                disabled={removeUserMutation.isPending || !removeUserEmail.trim()}
                 data-testid="button-remove-user"
               >
                 {removeUserMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Trash2 className="w-4 h-4 mr-2" />}
