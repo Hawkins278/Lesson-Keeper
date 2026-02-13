@@ -19,7 +19,6 @@ import type { User } from "@shared/models/auth";
 
 const ROLE_LABELS: Record<string, string> = {
   superadmin: "Superadministrator",
-  admin: "Administrator",
   user: "User",
 };
 
@@ -37,7 +36,7 @@ interface AppSidebarProps {
 
 export function AppSidebar({ user }: AppSidebarProps) {
   const [location] = useLocation();
-  const isAdminUser = user?.role === "admin" || user?.role === "superadmin";
+  const isAdminUser = user?.role === "superadmin";
 
   const initials = user
     ? `${(user.firstName || "")[0] || ""}${(user.lastName || "")[0] || ""}`.toUpperCase() || "U"

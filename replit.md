@@ -16,13 +16,12 @@ A full-stack web application for capturing, organizing, and learning from projec
 - Collapsible category/subcategory groupings
 - Lesson detail drill-down dialog
 - Scoring system: subcategories start at 500 when first "Could Be Better" lesson is recorded, decay by 1 point per day, boost by 250 for each new issue
-- Role-based access control: User, Administrator, Superadministrator
-- Admin page for managing reference data and user roles
+- Role-based access control: User and Superadministrator
+- Admin page for managing reference data and superadministrator accounts
 
 ## Role System
 - **User**: Default role. Can view dashboard, upload lessons, browse projects.
-- **Administrator**: Can manage reference data (Project Types, Phases, Categories, Subcategories), manage other admin accounts. Cannot edit superadmin list.
-- **Superadministrator**: Full access. Can manage superadmin accounts. Minimum 2 superadmins required at all times. Each must have email + ID. Superadmins do not appear in admin list.
+- **Superadministrator**: Full access. Can manage reference data, superadmin accounts. Minimum 2 superadmins required at all times. Each must have email + ID.
 
 ## Project Structure
 ```
@@ -38,7 +37,7 @@ client/src/components/     - Sidebar, Filters, LessonDetailDialog, ThemeToggle
 ```
 
 ## Data Model
-- **Users**: id, email, firstName, lastName, profileImageUrl, role (user|admin|superadmin)
+- **Users**: id, email, firstName, lastName, profileImageUrl, role (user|superadmin)
 - **Projects**: projectType, name, closeDate, projectManager, description
 - **LessonCategories**: name, description
 - **LessonSubcategories**: name, categoryId, currentScore, lastScoreUpdatedAt, firstRecordedDate
@@ -46,12 +45,10 @@ client/src/components/     - Sidebar, Filters, LessonDetailDialog, ThemeToggle
 - **ReferenceValues**: type (ProjectType|ProjectPhase), value — stores configurable dropdown values for template generation
 
 ## Admin API Endpoints
-- GET /api/admin/users — list admins and superadmins (requires admin)
-- POST /api/admin/promote — add/change admin by email (requires admin)
-- DELETE /api/admin/demote/:userId — demote admin to user (requires admin)
+- GET /api/admin/users — list superadmins (requires superadmin)
 - POST /api/admin/superadmin — add superadmin by email (requires superadmin)
 - DELETE /api/admin/superadmin/:userId — remove superadmin (requires superadmin, min 2 enforced)
-- POST/DELETE /api/reference-data/:type — manage reference data (requires admin)
+- POST/DELETE /api/reference-data/:type — manage reference data (requires superadmin)
 
 ## Excel Template Format
 - **Sheet 1 "Lessons Template"**: Structured layout with styled section headers (dark blue) and column headers (light blue)

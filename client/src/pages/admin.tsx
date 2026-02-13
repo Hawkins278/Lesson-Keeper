@@ -11,7 +11,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/use-auth";
-import { Plus, X, Loader2, Shield, ShieldAlert, UserPlus, Download } from "lucide-react";
+import { Plus, X, Loader2, Shield, ShieldAlert, Download } from "lucide-react";
 import type { User } from "@shared/models/auth";
 
 interface RefEntry {
@@ -132,7 +132,7 @@ function ReferenceFieldSection({
   );
 }
 
-function UserCard({ user, onRemove, canRemove, roleLabel }: { user: User; onRemove?: () => void; canRemove: boolean; roleLabel: string }) {
+function UserCard({ user, onRemove, canRemove }: { user: User; onRemove?: () => void; canRemove: boolean }) {
   const [confirming, setConfirming] = useState(false);
   const initials = `${(user.firstName || "")[0] || ""}${(user.lastName || "")[0] || ""}`.toUpperCase() || "U";
 
@@ -160,9 +160,6 @@ function UserCard({ user, onRemove, canRemove, roleLabel }: { user: User; onRemo
             {user.email || user.id}
           </p>
         </div>
-        <Badge variant="outline" className="text-xs flex-shrink-0 no-default-active-elevate" data-testid={`badge-role-${user.id}`}>
-          {roleLabel}
-        </Badge>
       </div>
       {canRemove && onRemove && (
         <div className="flex items-center gap-2 flex-shrink-0">
@@ -194,7 +191,6 @@ export default function AdminPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [adminEmail, setAdminEmail] = useState("");
   const [superadminEmail, setSuperadminEmail] = useState("");
 
   const currentUserRole = user?.role as string;
@@ -204,7 +200,7 @@ export default function AdminPage() {
     queryKey: ["/api/reference-data"],
   });
 
-  const { data: adminData, isLoading: adminLoading } = useQuery<{ admins: User[]; superadmins: User[] }>({
+  const { data: adminData, isLoading: adminLoading } = useQuery<{ superadmins: User[] }>({
     queryKey: ["/api/admin/users"],
   });
 
@@ -231,35 +227,6 @@ export default function AdminPage() {
     },
     onError: (error: any) => {
       toast({ title: "Cannot remove", description: error.message || "Failed to remove value", variant: "destructive" });
-    },
-  });
-
-  const promoteMutation = useMutation({
-    mutationFn: async ({ email, role }: { email: string; role: string }) => {
-      const res = await apiRequest("POST", "/api/admin/promote", { email, role });
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
-      setAdminEmail("");
-      toast({ title: "Success", description: "Administrator added" });
-    },
-    onError: (error: any) => {
-      toast({ title: "Error", description: error.message || "Failed to add administrator", variant: "destructive" });
-    },
-  });
-
-  const demoteMutation = useMutation({
-    mutationFn: async (userId: string) => {
-      const res = await apiRequest("DELETE", `/api/admin/demote/${userId}`);
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
-      toast({ title: "Success", description: "Administrator removed" });
-    },
-    onError: (error: any) => {
-      toast({ title: "Error", description: error.message || "Failed to remove administrator", variant: "destructive" });
     },
   });
 
@@ -309,7 +276,7 @@ export default function AdminPage() {
     }
   };
 
-  if (currentUserRole !== "admin" && currentUserRole !== "superadmin") {
+  if (currentUserRole !== "superadmin") {
     return (
       <div className="flex items-center justify-center h-full">
         <p className="text-muted-foreground">You do not have access to this page.</p>
@@ -321,7 +288,7 @@ export default function AdminPage() {
     <div className="max-w-4xl mx-auto p-6 space-y-8">
       <div>
         <h1 className="text-2xl font-serif font-bold" data-testid="text-admin-title">Administration</h1>
-        <p className="text-muted-foreground mt-1">Manage reference data and user roles.</p>
+        <p className="text-muted-foreground mt-1">Manage reference data and superadministrator accounts.</p>
       </div>
 
       <Card className="p-6">
@@ -384,76 +351,15 @@ export default function AdminPage() {
 
       <Card className="p-6">
         <div className="flex items-center gap-2 mb-4">
-          <UserPlus className="w-5 h-5 text-primary" />
-          <h2 className="text-lg font-semibold" data-testid="text-admin-accounts-title">Administrator Accounts</h2>
-        </div>
-        <p className="text-sm text-muted-foreground mb-4">
-          Administrators can manage reference data and create other administrator accounts.
-        </p>
-
-        {adminLoading ? (
-          <Skeleton className="h-16 w-full" />
-        ) : (
-          <div>
-            {adminData?.admins && adminData.admins.length > 0 ? (
-              <div className="divide-y">
-                {adminData.admins.map((admin) => (
-                  <UserCard
-                    key={admin.id}
-                    user={admin}
-                    roleLabel="Administrator"
-                    canRemove={true}
-                    onRemove={() => demoteMutation.mutate(admin.id)}
-                  />
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-muted-foreground italic py-2">No administrator accounts.</p>
-            )}
-            <div className="flex items-center gap-2 mt-4 flex-wrap">
-              <Input
-                placeholder="Enter user email to add as administrator..."
-                value={adminEmail}
-                onChange={(e) => setAdminEmail(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && adminEmail.trim()) {
-                    promoteMutation.mutate({ email: adminEmail.trim(), role: "admin" });
-                  }
-                }}
-                className="flex-1"
-                data-testid="input-add-admin-email"
-              />
-              <Button
-                variant="outline"
-                onClick={() => promoteMutation.mutate({ email: adminEmail.trim(), role: "admin" })}
-                disabled={promoteMutation.isPending || !adminEmail.trim()}
-                data-testid="button-add-admin"
-              >
-                {promoteMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
-                Add Administrator
-              </Button>
-            </div>
-          </div>
-        )}
-      </Card>
-
-      <Card className="p-6">
-        <div className="flex items-center gap-2 mb-4">
-          <ShieldAlert className="w-5 h-5 text-destructive" />
+          <ShieldAlert className="w-5 h-5 text-primary" />
           <h2 className="text-lg font-semibold" data-testid="text-superadmin-title">Superadministrator Accounts</h2>
         </div>
         <p className="text-sm text-muted-foreground mb-1">
-          Superadministrators have full access and can manage other superadministrators.
+          Superadministrators have full access including reference data management and user administration.
         </p>
         <p className="text-sm text-muted-foreground mb-4">
           There must always be at least 2 superadministrators. Each must have an email and ID.
         </p>
-
-        {!isSuperadmin && (
-          <Badge variant="outline" className="mb-4 no-default-active-elevate">
-            Only superadministrators can edit this section
-          </Badge>
-        )}
 
         {adminLoading ? (
           <Skeleton className="h-16 w-full" />
@@ -465,8 +371,7 @@ export default function AdminPage() {
                   <UserCard
                     key={sa.id}
                     user={sa}
-                    roleLabel="Superadministrator"
-                    canRemove={isSuperadmin && (adminData.superadmins.length > 2)}
+                    canRemove={adminData.superadmins.length > 2}
                     onRemove={() => removeSuperadminMutation.mutate(sa.id)}
                   />
                 ))}
@@ -474,31 +379,29 @@ export default function AdminPage() {
             ) : (
               <p className="text-sm text-muted-foreground italic py-2">No superadministrator accounts.</p>
             )}
-            {isSuperadmin && (
-              <div className="flex items-center gap-2 mt-4 flex-wrap">
-                <Input
-                  placeholder="Enter user email to add as superadministrator..."
-                  value={superadminEmail}
-                  onChange={(e) => setSuperadminEmail(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && superadminEmail.trim()) {
-                      addSuperadminMutation.mutate(superadminEmail.trim());
-                    }
-                  }}
-                  className="flex-1"
-                  data-testid="input-add-superadmin-email"
-                />
-                <Button
-                  variant="outline"
-                  onClick={() => addSuperadminMutation.mutate(superadminEmail.trim())}
-                  disabled={addSuperadminMutation.isPending || !superadminEmail.trim()}
-                  data-testid="button-add-superadmin"
-                >
-                  {addSuperadminMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
-                  Add Superadministrator
-                </Button>
-              </div>
-            )}
+            <div className="flex items-center gap-2 mt-4 flex-wrap">
+              <Input
+                placeholder="Enter user email to add as superadministrator..."
+                value={superadminEmail}
+                onChange={(e) => setSuperadminEmail(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && superadminEmail.trim()) {
+                    addSuperadminMutation.mutate(superadminEmail.trim());
+                  }
+                }}
+                className="flex-1"
+                data-testid="input-add-superadmin-email"
+              />
+              <Button
+                variant="outline"
+                onClick={() => addSuperadminMutation.mutate(superadminEmail.trim())}
+                disabled={addSuperadminMutation.isPending || !superadminEmail.trim()}
+                data-testid="button-add-superadmin"
+              >
+                {addSuperadminMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Plus className="w-4 h-4 mr-2" />}
+                Add Superadministrator
+              </Button>
+            </div>
           </div>
         )}
       </Card>
