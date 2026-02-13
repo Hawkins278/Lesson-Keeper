@@ -1,5 +1,5 @@
 import { useLocation, Link } from "wouter";
-import { Upload, LayoutDashboard, LogOut, FolderOpen, Settings } from "lucide-react";
+import { Upload, LayoutDashboard, LogOut, FolderOpen, Settings, Users } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -37,7 +37,8 @@ const userNavItems = [
 
 const adminOnlyNavItems = [
   { title: "Upload Lessons", url: "/upload", icon: Upload },
-  { title: "Administration", url: "/admin", icon: Settings },
+  { title: "Reference Data", url: "/admin", icon: Settings },
+  { title: "User Administration", url: "/user-admin", icon: Users },
 ];
 
 interface AppSidebarProps {

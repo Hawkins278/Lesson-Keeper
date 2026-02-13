@@ -17,7 +17,8 @@ A full-stack web application for capturing, organizing, and learning from projec
 - Lesson detail drill-down dialog
 - Scoring system: subcategories start at 500 when first "Could Be Better" lesson is recorded, decay by 1 point per day, boost by 250 for each new issue
 - Role-based access control: User and Admin
-- Admin page for managing reference data and admin accounts
+- Reference Data page for managing reference data and impact levels
+- User Administration page for managing admin accounts and user access
 
 ## Role System
 - **User**: Default role. Can only view Dashboard and Projects pages.
@@ -32,7 +33,7 @@ server/storage.ts         - Data access layer (IStorage interface)
 server/routes.ts          - Express API routes (includes admin middleware)
 server/seed.ts            - Seed data for demo
 client/src/App.tsx         - Main app with auth routing and footer
-client/src/pages/          - Landing, Dashboard, Upload, Projects, Admin pages
+client/src/pages/          - Landing, Dashboard, Upload, Projects, Reference Data (admin.tsx), User Admin pages
 client/src/components/     - Sidebar, Filters, LessonDetailDialog, ThemeToggle
 ```
 
@@ -60,6 +61,7 @@ client/src/components/     - Sidebar, Filters, LessonDetailDialog, ThemeToggle
 - Template generation uses `exceljs` library for styling; upload parsing uses `xlsx` (SheetJS)
 
 ## Recent Changes
+- 2026-02-13: Split Administration page into two: Reference Data page (/admin) and User Administration page (/user-admin)
 - 2026-02-13: Added User Management section to Admin page: add/remove user IDs, download all users as CSV (with admin flag)
 - 2026-02-13: Renamed Superadministrator role to Admin; users can only see Dashboard and Projects
 - 2026-02-12: Added role-based access control (user/admin) with admin page

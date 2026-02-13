@@ -14,6 +14,7 @@ import Dashboard from "@/pages/dashboard";
 import UploadPage from "@/pages/upload";
 import ProjectsPage from "@/pages/projects";
 import AdminPage from "@/pages/admin";
+import UserAdminPage from "@/pages/user-admin";
 import { Skeleton } from "@/components/ui/skeleton";
 import hawkinsLogo from "@assets/Hawkins-Digital_1770883345237.jpg";
 import citbLogo from "@assets/citb_logo_1770915007635.png";
@@ -60,6 +61,7 @@ function AuthenticatedApp() {
               <Route path="/upload" component={UploadPage} />
               <Route path="/projects" component={ProjectsPage} />
               <Route path="/admin" component={AdminPage} />
+              <Route path="/user-admin" component={UserAdminPage} />
               <Route component={NotFound} />
             </Switch>
           </main>
