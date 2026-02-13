@@ -31,8 +31,7 @@ export function LessonDetailDialog({ lesson, open, onOpenChange }: LessonDetailD
               </DialogTitle>
               <div className="flex flex-wrap items-center gap-2 mt-2">
                 <Badge
-                  variant={isWentWell ? "default" : "destructive"}
-                  className="text-xs"
+                  className={`text-xs ${isWentWell ? "bg-ww text-ww-foreground" : "bg-cbb text-cbb-foreground"}`}
                   data-testid="badge-lesson-type"
                 >
                   {isWentWell ? "Went Well" : "Could Be Better"}

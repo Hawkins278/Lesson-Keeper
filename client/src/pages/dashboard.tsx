@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { ChevronDown, ChevronRight, AlertTriangle, CheckCircle2, TrendingDown } from "lucide-react";
+import { ChevronDown, ChevronRight, AlertTriangle, CheckCircle2, TrendingDown, List } from "lucide-react";
 import { Filters, type FilterState } from "@/components/filters";
 import { LessonDetailDialog } from "@/components/lesson-detail-dialog";
 import type { Lesson, Project, LessonCategory, LessonSubcategory, ReferenceValue } from "@shared/schema";
@@ -30,11 +30,13 @@ interface ReferenceData {
   subcategories: LessonSubcategory[];
 }
 
+type TabType = "could-be-better" | "went-well" | "all";
+
 function getScoreColor(score: number) {
-  if (score >= 750) return "text-destructive";
-  if (score >= 500) return "text-chart-4";
-  if (score >= 250) return "text-chart-3";
-  return "text-chart-2";
+  if (score >= 750) return "text-cbb";
+  if (score >= 500) return "text-cbb/80";
+  if (score >= 250) return "text-cbb/60";
+  return "text-muted-foreground";
 }
 
 function getScoreBarWidth(score: number) {
@@ -42,14 +44,14 @@ function getScoreBarWidth(score: number) {
 }
 
 function getScoreBarColor(score: number) {
-  if (score >= 750) return "bg-destructive/70";
-  if (score >= 500) return "bg-chart-4/70";
-  if (score >= 250) return "bg-chart-3/70";
-  return "bg-chart-2/70";
+  if (score >= 750) return "bg-cbb";
+  if (score >= 500) return "bg-cbb/70";
+  if (score >= 250) return "bg-cbb/50";
+  return "bg-cbb/30";
 }
 
 export default function Dashboard() {
-  const [activeTab, setActiveTab] = useState<"could-be-better" | "went-well">("could-be-better");
+  const [activeTab, setActiveTab] = useState<TabType>("could-be-better");
   const [filters, setFilters] = useState<FilterState>({
     projectType: null,
     phase: null,
@@ -106,8 +108,10 @@ export default function Dashboard() {
   }, [lessons, filters, projects, subcategories]);
 
   const buildGroups = useMemo(() => {
-    const buildForType = (type: "CouldHaveGoneBetter" | "WentWell"): SubcategoryGroup[] => {
-      const typedLessons = filteredLessons.filter((l) => l.type === type);
+    const buildForType = (type: "CouldHaveGoneBetter" | "WentWell" | "All"): SubcategoryGroup[] => {
+      const typedLessons = type === "All"
+        ? filteredLessons
+        : filteredLessons.filter((l) => l.type === type);
       const groups: Map<number, SubcategoryGroup> = new Map();
 
       typedLessons.forEach((lesson) => {
@@ -138,6 +142,7 @@ export default function Dashboard() {
     return {
       couldBeBetter: buildForType("CouldHaveGoneBetter"),
       wentWell: buildForType("WentWell"),
+      all: buildForType("All"),
     };
   }, [filteredLessons, subcategories, categories, projects]);
 
@@ -151,6 +156,7 @@ export default function Dashboard() {
 
   const couldBeBetterCount = lessons.filter((l) => l.type === "CouldHaveGoneBetter").length;
   const wentWellCount = lessons.filter((l) => l.type === "WentWell").length;
+  const allCount = lessons.length;
 
   if (lessonsLoading) {
     return (
@@ -167,7 +173,15 @@ export default function Dashboard() {
   }
 
   const isCBB = activeTab === "could-be-better";
-  const activeGroups = isCBB ? buildGroups.couldBeBetter : buildGroups.wentWell;
+  const isWW = activeTab === "went-well";
+  const isAll = activeTab === "all";
+  const activeGroups = isCBB
+    ? buildGroups.couldBeBetter
+    : isWW
+      ? buildGroups.wentWell
+      : buildGroups.all;
+
+  const showScores = isCBB || isAll;
 
   return (
     <div className="p-6 space-y-5">
@@ -176,10 +190,10 @@ export default function Dashboard() {
           <h1 className="text-2xl font-serif font-bold tracking-tight" data-testid="text-dashboard-title">Lessons Dashboard</h1>
           <p className="text-sm text-muted-foreground mt-1">Browse, filter, and explore lessons learned across all projects.</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <Button
             variant={isCBB ? "default" : "outline"}
-            className={isCBB ? "bg-destructive text-destructive-foreground border-destructive" : ""}
+            className={isCBB ? "bg-cbb text-cbb-foreground border-cbb" : ""}
             onClick={() => setActiveTab("could-be-better")}
             data-testid="tab-could-be-better"
           >
@@ -188,14 +202,23 @@ export default function Dashboard() {
             <Badge variant="secondary" className="ml-2 text-xs no-default-active-elevate no-default-hover-elevate">{couldBeBetterCount}</Badge>
           </Button>
           <Button
-            variant={!isCBB ? "default" : "outline"}
-            className={!isCBB ? "bg-chart-2 text-white border-chart-2" : ""}
+            variant={isWW ? "default" : "outline"}
+            className={isWW ? "bg-ww text-ww-foreground border-ww" : ""}
             onClick={() => setActiveTab("went-well")}
             data-testid="tab-went-well"
           >
             <CheckCircle2 className="w-4 h-4 mr-1.5" />
             Went Well
             <Badge variant="secondary" className="ml-2 text-xs no-default-active-elevate no-default-hover-elevate">{wentWellCount}</Badge>
+          </Button>
+          <Button
+            variant={isAll ? "default" : "outline"}
+            onClick={() => setActiveTab("all")}
+            data-testid="tab-all-lessons"
+          >
+            <List className="w-4 h-4 mr-1.5" />
+            All Lessons
+            <Badge variant="secondary" className="ml-2 text-xs no-default-active-elevate no-default-hover-elevate">{allCount}</Badge>
           </Button>
         </div>
       </div>
@@ -214,13 +237,9 @@ export default function Dashboard() {
       <div className="space-y-2">
         {activeGroups.length === 0 ? (
           <Card className="p-8 text-center">
-            {isCBB ? (
-              <AlertTriangle className="w-10 h-10 mx-auto text-muted-foreground/40 mb-3" />
-            ) : (
-              <CheckCircle2 className="w-10 h-10 mx-auto text-muted-foreground/40 mb-3" />
-            )}
+            <List className="w-10 h-10 mx-auto text-muted-foreground/40 mb-3" />
             <p className="text-sm text-muted-foreground">
-              No "{isCBB ? "could be better" : "went well"}" lessons found matching your filters.
+              No lessons found matching your filters.
             </p>
           </Card>
         ) : (
@@ -240,8 +259,20 @@ export default function Dashboard() {
                           <span className="text-xs text-muted-foreground flex-shrink-0">({group.category.name})</span>
                         </div>
                         <div className="flex items-center gap-3 flex-shrink-0">
-                          <span className="text-xs text-muted-foreground">{group.lessons.length} lesson{group.lessons.length !== 1 ? "s" : ""}</span>
-                          {isCBB && (
+                          {isAll && (
+                            <div className="flex items-center gap-1.5">
+                              <Badge className="text-xs bg-cbb text-cbb-foreground no-default-active-elevate no-default-hover-elevate">
+                                {group.lessons.filter(l => l.type === "CouldHaveGoneBetter").length}
+                              </Badge>
+                              <Badge className="text-xs bg-ww text-ww-foreground no-default-active-elevate no-default-hover-elevate">
+                                {group.lessons.filter(l => l.type === "WentWell").length}
+                              </Badge>
+                            </div>
+                          )}
+                          {!isAll && (
+                            <span className="text-xs text-muted-foreground">{group.lessons.length} lesson{group.lessons.length !== 1 ? "s" : ""}</span>
+                          )}
+                          {showScores && group.effectiveScore > 0 && (
                             <div className="flex items-center gap-1.5">
                               <TrendingDown className={`w-3.5 h-3.5 ${getScoreColor(group.effectiveScore)}`} />
                               <span className={`text-sm font-mono font-semibold ${getScoreColor(group.effectiveScore)}`} data-testid={`text-score-${group.subcategory.id}`}>
@@ -251,7 +282,7 @@ export default function Dashboard() {
                           )}
                         </div>
                       </div>
-                      {isCBB && (
+                      {showScores && group.effectiveScore > 0 && (
                         <div className="h-1.5 rounded-sm bg-muted overflow-hidden">
                           <div
                             className={`h-full rounded-sm transition-all ${getScoreBarColor(group.effectiveScore)}`}
@@ -265,20 +296,34 @@ export default function Dashboard() {
                     <div className="space-y-1.5 mt-1">
                       {group.lessons
                         .sort((a, b) => new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime())
-                        .map((lesson) => (
-                          <button
-                            key={lesson.id}
-                            onClick={() => setSelectedLesson(lesson)}
-                            className="w-full text-left p-2.5 rounded-md hover-elevate flex items-center justify-between gap-3"
-                            data-testid={`button-lesson-${lesson.id}`}
-                          >
-                            <div className="min-w-0">
-                              <p className="text-sm font-medium truncate"><span className="text-muted-foreground font-mono mr-1.5">#{lesson.id}</span>{lesson.name}</p>
-                              <p className="text-xs text-muted-foreground truncate">{lesson.project?.name || "—"} · {lesson.phase}</p>
-                            </div>
-                            <Badge variant="outline" className="text-xs flex-shrink-0 no-default-active-elevate">{lesson.phase}</Badge>
-                          </button>
-                        ))}
+                        .map((lesson) => {
+                          const lessonIsCBB = lesson.type === "CouldHaveGoneBetter";
+                          return (
+                            <button
+                              key={lesson.id}
+                              onClick={() => setSelectedLesson(lesson)}
+                              className="w-full text-left p-2.5 rounded-md hover-elevate flex items-center justify-between gap-3"
+                              data-testid={`button-lesson-${lesson.id}`}
+                            >
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <div className={`w-1 h-8 rounded-full flex-shrink-0 ${lessonIsCBB ? "bg-cbb" : "bg-ww"}`} />
+                                <div className="min-w-0">
+                                  <p className="text-sm font-medium truncate"><span className="text-muted-foreground font-mono mr-1.5">#{lesson.id}</span>{lesson.name}</p>
+                                  <p className="text-xs text-muted-foreground truncate">{lesson.project?.name || "—"} · {lesson.phase}</p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2 flex-shrink-0">
+                                <Badge
+                                  className={`text-xs no-default-active-elevate ${lessonIsCBB ? "bg-cbb/15 text-cbb border-cbb/30" : "bg-ww/15 text-ww border-ww/30"}`}
+                                  variant="outline"
+                                >
+                                  {lessonIsCBB ? "CBB" : "WW"}
+                                </Badge>
+                                <Badge variant="outline" className="text-xs flex-shrink-0 no-default-active-elevate">{lesson.phase}</Badge>
+                              </div>
+                            </button>
+                          );
+                        })}
                     </div>
                   </CollapsibleContent>
                 </Collapsible>
