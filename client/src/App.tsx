@@ -18,6 +18,7 @@ import UserAdminPage from "@/pages/user-admin";
 import { Skeleton } from "@/components/ui/skeleton";
 import hawkinsLogo from "@assets/Hawkins-Digital_1770883345237.jpg";
 import citbLogo from "@assets/citb_logo_1770915007635.png";
+import hermitIcon from "@assets/Zeppelin_hermit_1_1770990450114.png";
 
 function AuthenticatedApp() {
   const { user, isLoading, isAuthenticated } = useAuth();
@@ -49,7 +50,10 @@ function AuthenticatedApp() {
         <div className="flex flex-col flex-1 min-w-0">
           <header className="sticky top-0 z-50 flex items-center justify-between gap-4 px-3 py-1.5 border-b bg-background/80 backdrop-blur-md">
             <SidebarTrigger data-testid="button-sidebar-toggle" />
-            <span className="text-5xl tracking-tight" style={{ fontFamily: '"Boucherie Block W05 Bold", serif' }} data-testid="text-header-logo">LessonKeeper</span>
+            <div className="flex items-center gap-3">
+              <span className="text-5xl tracking-tight" style={{ fontFamily: '"Boucherie Block W05 Bold", serif' }} data-testid="text-header-logo">LessonKeeper</span>
+              <img src={hermitIcon} alt="LessonKeeper" className="h-[72px] w-[72px] rounded-md object-cover" data-testid="img-hermit-icon" />
+            </div>
             <div className="flex items-center gap-2">
               <img src={citbLogo} alt="CITB" className="h-[108px] w-[108px] rounded-md object-contain" data-testid="img-citb-logo" />
               <ThemeToggle />

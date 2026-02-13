@@ -7,6 +7,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { CalendarDays, FolderOpen, Layers, Tag, User, FileText, Gauge } from "lucide-react";
+import { formatUKDate } from "@/lib/format-date";
 import type { Lesson, Project, LessonCategory, LessonSubcategory, ImpactLevel } from "@shared/schema";
 
 interface LessonDetailDialogProps {
@@ -65,7 +66,7 @@ export function LessonDetailDialog({ lesson, open, onOpenChange }: LessonDetailD
                 {lesson.project.closeDate && (
                   <div className="flex items-center gap-1.5 text-muted-foreground">
                     <CalendarDays className="w-3.5 h-3.5" />
-                    {lesson.project.closeDate}
+                    {formatUKDate(lesson.project.closeDate)}
                   </div>
                 )}
               </div>

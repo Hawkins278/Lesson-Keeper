@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { FolderOpen, CalendarDays, User, FileText, ChevronDown, ChevronRight, Loader2 } from "lucide-react";
 import { LessonDetailDialog } from "@/components/lesson-detail-dialog";
+import { formatUKDate } from "@/lib/format-date";
 import type { Project, Lesson, LessonCategory, LessonSubcategory, ImpactLevel } from "@shared/schema";
 
 type EnrichedLesson = Lesson & { category?: LessonCategory; subcategory?: LessonSubcategory; impact?: ImpactLevel };
@@ -210,7 +211,7 @@ export default function ProjectsPage() {
                       {project.closeDate && (
                         <span className="flex items-center gap-1">
                           <CalendarDays className="w-3.5 h-3.5" />
-                          {project.closeDate}
+                          {formatUKDate(project.closeDate)}
                         </span>
                       )}
                     </div>
