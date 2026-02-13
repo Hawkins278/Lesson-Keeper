@@ -67,9 +67,10 @@ function AuthenticatedApp() {
             <div className="px-4 py-1.5 flex flex-wrap items-center justify-between gap-4 text-sm text-muted-foreground">
               <div className="flex items-center gap-3">
                 <img src={hawkinsLogo} alt="Hawkins-Digital" className="h-[52px] w-[52px] rounded-md object-cover" data-testid="img-footer-logo" />
-                <span className="text-xs text-muted-foreground">A Hawkins-Digital product</span>
+                <span className="align-super text-[0.45rem]">TM</span>
+                <span className="text-[0.9rem] text-muted-foreground">A Hawkins-Digital<span className="align-super text-[0.5rem]">TM</span> product</span>
               </div>
-              <div className="text-xs">
+              <div className="text-[0.9rem]">
                 <span style={{ fontFamily: '"Boucherie Block W05 Bold", serif' }}>LessonKeeper</span>
                 <span className="align-super text-[0.5rem]">TM</span>
                 <span className="mx-1.5">·</span>
