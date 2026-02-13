@@ -35,10 +35,16 @@ export interface IStorage {
   getReferenceValues(type: string): Promise<ReferenceValue[]>;
   createReferenceValue(value: InsertReferenceValue): Promise<ReferenceValue>;
   deleteReferenceValue(id: number): Promise<void>;
+  renameReferenceValue(id: number, newValue: string): Promise<ReferenceValue | undefined>;
+  getReferenceValueUsageCount(id: number): Promise<number>;
   hasDependentLessonsForCategory(categoryId: number): Promise<boolean>;
   hasDependentLessonsForSubcategory(subcategoryId: number): Promise<boolean>;
   deleteCategory(id: number): Promise<void>;
   deleteSubcategory(id: number): Promise<void>;
+  renameCategory(id: number, newName: string): Promise<LessonCategory | undefined>;
+  renameSubcategory(id: number, newName: string): Promise<LessonSubcategory | undefined>;
+  getCategoryUsageCount(categoryId: number): Promise<number>;
+  getSubcategoryUsageCount(subcategoryId: number): Promise<number>;
 
   getImpactLevels(): Promise<ImpactLevel[]>;
   getImpactLevel(id: number): Promise<ImpactLevel | undefined>;
@@ -46,6 +52,7 @@ export interface IStorage {
   updateImpactLevel(id: number, data: Partial<InsertImpactLevel>): Promise<ImpactLevel | undefined>;
   deleteImpactLevel(id: number): Promise<void>;
   updateLessonImpact(lessonId: number, impactId: number | null): Promise<void>;
+  getImpactLevelUsageCount(impactId: number): Promise<number>;
 
   getUsersByRole(role: UserRole): Promise<User[]>;
   getUsersByRoles(roles: UserRole[]): Promise<User[]>;
@@ -206,6 +213,63 @@ export class DatabaseStorage implements IStorage {
 
   async deleteSubcategory(id: number): Promise<void> {
     await db.delete(lessonSubcategories).where(eq(lessonSubcategories.id, id));
+  }
+
+  async renameReferenceValue(id: number, newValue: string): Promise<ReferenceValue | undefined> {
+    const [existing] = await db.select().from(referenceValues).where(eq(referenceValues.id, id));
+    if (!existing) return undefined;
+    const oldValue = existing.value;
+    const [updated] = await db.update(referenceValues).set({ value: newValue }).where(eq(referenceValues.id, id)).returning();
+    if (existing.type === "ProjectType") {
+      await db.update(projects).set({ projectType: newValue }).where(eq(projects.projectType, oldValue));
+    } else if (existing.type === "ProjectPhase") {
+      await db.update(lessons).set({ phase: newValue }).where(eq(lessons.phase, oldValue));
+    }
+    return updated;
+  }
+
+  async getReferenceValueUsageCount(id: number): Promise<number> {
+    const [ref] = await db.select().from(referenceValues).where(eq(referenceValues.id, id));
+    if (!ref) return 0;
+    if (ref.type === "ProjectType") {
+      const [result] = await db.select({ count: sql<number>`count(*)` }).from(projects).where(eq(projects.projectType, ref.value));
+      return Number(result.count);
+    } else if (ref.type === "ProjectPhase") {
+      const [result] = await db.select({ count: sql<number>`count(*)` }).from(lessons).where(eq(lessons.phase, ref.value));
+      return Number(result.count);
+    }
+    return 0;
+  }
+
+  async renameCategory(id: number, newName: string): Promise<LessonCategory | undefined> {
+    const [updated] = await db.update(lessonCategories).set({ name: newName }).where(eq(lessonCategories.id, id)).returning();
+    return updated;
+  }
+
+  async renameSubcategory(id: number, newName: string): Promise<LessonSubcategory | undefined> {
+    const [updated] = await db.update(lessonSubcategories).set({ name: newName }).where(eq(lessonSubcategories.id, id)).returning();
+    return updated;
+  }
+
+  async getCategoryUsageCount(categoryId: number): Promise<number> {
+    const subs = await db.select({ id: lessonSubcategories.id }).from(lessonSubcategories).where(eq(lessonSubcategories.categoryId, categoryId));
+    if (subs.length === 0) return 0;
+    let total = 0;
+    for (const sub of subs) {
+      const [result] = await db.select({ count: sql<number>`count(*)` }).from(lessons).where(eq(lessons.subcategoryId, sub.id));
+      total += Number(result.count);
+    }
+    return total;
+  }
+
+  async getSubcategoryUsageCount(subcategoryId: number): Promise<number> {
+    const [result] = await db.select({ count: sql<number>`count(*)` }).from(lessons).where(eq(lessons.subcategoryId, subcategoryId));
+    return Number(result.count);
+  }
+
+  async getImpactLevelUsageCount(impactId: number): Promise<number> {
+    const [result] = await db.select({ count: sql<number>`count(*)` }).from(lessons).where(eq(lessons.impactId, impactId));
+    return Number(result.count);
   }
 
   async getImpactLevels(): Promise<ImpactLevel[]> {

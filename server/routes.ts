@@ -147,6 +147,15 @@ export async function registerRoutes(
       const id = parseInt(req.params.id);
       if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
       const { description, weightingPercent, sortOrder } = req.body;
+
+      const usageCount = await storage.getImpactLevelUsageCount(id);
+      if (usageCount > 0 && weightingPercent !== undefined) {
+        const existing = await storage.getImpactLevel(id);
+        if (existing && existing.weightingPercent !== weightingPercent) {
+          return res.status(409).json({ message: `Cannot change weighting: this impact level is assigned to ${usageCount} lesson(s). Only the label can be renamed.` });
+        }
+      }
+
       const updateData: any = {};
       if (description !== undefined) updateData.description = description.trim();
       if (weightingPercent !== undefined) updateData.weightingPercent = weightingPercent;
@@ -164,6 +173,10 @@ export async function registerRoutes(
     try {
       const id = parseInt(req.params.id);
       if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
+      const usageCount = await storage.getImpactLevelUsageCount(id);
+      if (usageCount > 0) {
+        return res.status(409).json({ message: `Cannot remove: this impact level is assigned to ${usageCount} existing lesson(s).` });
+      }
       await storage.deleteImpactLevel(id);
       res.json({ success: true });
     } catch (error) {
@@ -214,22 +227,103 @@ export async function registerRoutes(
     }
   });
 
+  app.patch("/api/reference-data/:type/:id", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const { type, id } = req.params;
+      const { value } = req.body;
+      const numId = Number(id);
+      if (!value || typeof value !== "string" || !value.trim()) {
+        return res.status(400).json({ message: "Value is required" });
+      }
+      const trimmed = value.trim();
+
+      if (type === "ProjectType" || type === "ProjectPhase") {
+        const existing = await storage.getReferenceValues(type);
+        if (existing.some((v) => v.id !== numId && v.value.toLowerCase() === trimmed.toLowerCase())) {
+          return res.status(409).json({ message: `"${trimmed}" already exists` });
+        }
+        const updated = await storage.renameReferenceValue(numId, trimmed);
+        if (!updated) return res.status(404).json({ message: "Not found" });
+        return res.json({ id: updated.id, value: updated.value });
+      } else if (type === "LessonCategory") {
+        const dup = await storage.findCategoryByName(trimmed);
+        if (dup && dup.id !== numId) {
+          return res.status(409).json({ message: `"${trimmed}" already exists` });
+        }
+        const updated = await storage.renameCategory(numId, trimmed);
+        if (!updated) return res.status(404).json({ message: "Not found" });
+        return res.json({ id: updated.id, value: updated.name });
+      } else if (type === "LessonSubcategory") {
+        const updated = await storage.renameSubcategory(numId, trimmed);
+        if (!updated) return res.status(404).json({ message: "Not found" });
+        return res.json({ id: updated.id, value: updated.name, categoryId: updated.categoryId });
+      }
+      return res.status(400).json({ message: "Invalid type" });
+    } catch (error) {
+      console.error("Error renaming reference value:", error);
+      res.status(500).json({ message: "Failed to rename value" });
+    }
+  });
+
+  app.get("/api/reference-data/usage", isAuthenticated, isAdmin, async (_req: any, res) => {
+    try {
+      const ptValues = await storage.getReferenceValues("ProjectType");
+      const phValues = await storage.getReferenceValues("ProjectPhase");
+      const categories = await storage.getCategories();
+      const subcategories = await storage.getSubcategories();
+      const impacts = await storage.getImpactLevels();
+
+      const usage: Record<string, Record<number, number>> = {
+        ProjectType: {},
+        ProjectPhase: {},
+        LessonCategory: {},
+        LessonSubcategory: {},
+        ImpactLevel: {},
+      };
+
+      for (const pt of ptValues) {
+        usage.ProjectType[pt.id] = await storage.getReferenceValueUsageCount(pt.id);
+      }
+      for (const ph of phValues) {
+        usage.ProjectPhase[ph.id] = await storage.getReferenceValueUsageCount(ph.id);
+      }
+      for (const cat of categories) {
+        usage.LessonCategory[cat.id] = await storage.getCategoryUsageCount(cat.id);
+      }
+      for (const sub of subcategories) {
+        usage.LessonSubcategory[sub.id] = await storage.getSubcategoryUsageCount(sub.id);
+      }
+      for (const imp of impacts) {
+        usage.ImpactLevel[imp.id] = await storage.getImpactLevelUsageCount(imp.id);
+      }
+
+      res.json(usage);
+    } catch (error) {
+      console.error("Error fetching usage counts:", error);
+      res.status(500).json({ message: "Failed to fetch usage counts" });
+    }
+  });
+
   app.delete("/api/reference-data/:type/:id", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
       const { type, id } = req.params;
       const numId = Number(id);
       if (type === "ProjectType" || type === "ProjectPhase") {
+        const usageCount = await storage.getReferenceValueUsageCount(numId);
+        if (usageCount > 0) {
+          return res.status(409).json({ message: `Cannot remove: this value is assigned to ${usageCount} existing record(s).` });
+        }
         await storage.deleteReferenceValue(numId);
       } else if (type === "LessonCategory") {
         const hasLessons = await storage.hasDependentLessonsForCategory(numId);
         if (hasLessons) {
-          return res.status(409).json({ message: "Cannot remove this category because it has lessons linked to it." });
+          return res.status(409).json({ message: "Cannot remove: this category has lessons linked to it." });
         }
         await storage.deleteCategory(numId);
       } else if (type === "LessonSubcategory") {
         const hasLessons = await storage.hasDependentLessonsForSubcategory(numId);
         if (hasLessons) {
-          return res.status(409).json({ message: "Cannot remove this subcategory because it has lessons linked to it." });
+          return res.status(409).json({ message: "Cannot remove: this subcategory has lessons linked to it." });
         }
         await storage.deleteSubcategory(numId);
       } else {
