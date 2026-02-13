@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { BookOpen, Upload, TrendingUp, Shield, BarChart3, Lightbulb } from "lucide-react";
+import { BookOpen, Upload, TrendingUp, BarChart3 } from "lucide-react";
 import hawkinsLogo from "@assets/Hawkins-Digital_1770883345237.jpg";
 
 export default function LandingPage() {
@@ -25,73 +25,19 @@ export default function LandingPage() {
       </nav>
 
       <section className="max-w-6xl mx-auto px-6 pt-20 pb-16">
-        <div className="grid lg:grid-cols-2 gap-12 items-center">
-          <div className="space-y-6">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-md bg-primary/10 text-primary text-sm font-medium">
-              <Lightbulb className="w-3.5 h-3.5" />
-              Knowledge Management
-            </div>
-            <h1 className="text-4xl lg:text-5xl font-serif font-bold tracking-tight leading-tight" data-testid="text-hero-heading">
-              Capture &amp; Learn from Every Project
+        <div className="space-y-6">
+          <div className="space-y-2">
+            <h1 className="text-2xl font-serif font-bold tracking-tight" data-testid="text-hero-heading">
+              Projects
             </h1>
-            <p className="text-lg text-muted-foreground leading-relaxed max-w-lg">
+            <p className="text-sm text-muted-foreground">
               A centralized knowledge base for lessons learned across all your projects. Track what went well, identify areas for improvement, and make smarter decisions.
             </p>
-            <div className="flex flex-wrap items-center gap-3">
-              <Button size="lg" asChild data-testid="button-get-started">
-                <a href="/api/login">Get Started</a>
-              </Button>
-              <Button size="lg" variant="outline" asChild data-testid="button-learn-more">
-                <a href="#features">Learn More</a>
-              </Button>
-            </div>
-            <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground pt-2">
-              <span className="flex items-center gap-1.5">
-                <Shield className="w-3.5 h-3.5" /> SSO Secured
-              </span>
-              <span className="flex items-center gap-1.5">
-                <Upload className="w-3.5 h-3.5" /> Excel Import
-              </span>
-              <span className="flex items-center gap-1.5">
-                <BarChart3 className="w-3.5 h-3.5" /> Risk Scoring
-              </span>
-            </div>
           </div>
-
-          <div className="relative hidden lg:block">
-            <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-primary/15 rounded-md" />
-            <div className="relative p-8 space-y-4">
-              <Card className="p-4 space-y-2">
-                <div className="flex items-center justify-between gap-4">
-                  <span className="text-sm font-medium">Requirements Clarity</span>
-                  <span className="text-xs font-mono text-muted-foreground">Score: 1,180</span>
-                </div>
-                <div className="h-2 rounded-sm bg-muted overflow-hidden">
-                  <div className="h-full w-[85%] rounded-sm bg-destructive/70 transition-all" />
-                </div>
-                <p className="text-xs text-muted-foreground">5 lessons across 3 projects</p>
-              </Card>
-              <Card className="p-4 space-y-2">
-                <div className="flex items-center justify-between gap-4">
-                  <span className="text-sm font-medium">Stakeholder Engagement</span>
-                  <span className="text-xs font-mono text-muted-foreground">Score: 940</span>
-                </div>
-                <div className="h-2 rounded-sm bg-muted overflow-hidden">
-                  <div className="h-full w-[65%] rounded-sm bg-chart-4/70 transition-all" />
-                </div>
-                <p className="text-xs text-muted-foreground">3 lessons across 2 projects</p>
-              </Card>
-              <Card className="p-4 space-y-2 opacity-70">
-                <div className="flex items-center justify-between gap-4">
-                  <span className="text-sm font-medium">Resource Planning</span>
-                  <span className="text-xs font-mono text-muted-foreground">Score: 620</span>
-                </div>
-                <div className="h-2 rounded-sm bg-muted overflow-hidden">
-                  <div className="h-full w-[40%] rounded-sm bg-chart-2/70 transition-all" />
-                </div>
-                <p className="text-xs text-muted-foreground">2 lessons across 1 project</p>
-              </Card>
-            </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <Button size="lg" asChild data-testid="button-get-started">
+              <a href="/api/login">Sign In</a>
+            </Button>
           </div>
         </div>
       </section>
