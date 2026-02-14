@@ -54,53 +54,55 @@ export default function LandingPage() {
 
       <div className="flex-1 flex flex-col justify-center">
         <div className="max-w-5xl mx-auto w-full px-6 py-16 space-y-12">
-          <div className="space-y-3 text-center">
-            <h1 className="text-3xl lg:text-4xl font-serif font-bold tracking-tight leading-tight" data-testid="text-hero-heading">
-              Capture the Learning from All Your Projects
-            </h1>
-            <p className="text-muted-foreground max-w-2xl mx-auto">
-              A centralized knowledge base that turns project experiences into actionable insight. Track what went well, spotlight what needs attention, and build smarter teams.
-            </p>
-          </div>
+          <div className="grid md:grid-cols-2 gap-8 items-center">
+            <div className="space-y-3">
+              <h1 className="text-4xl lg:text-5xl font-serif font-bold tracking-tight leading-tight" data-testid="text-hero-heading">
+                Capture the Learning from All Your Projects
+              </h1>
+              <p className="text-muted-foreground">
+                A centralized knowledge base that turns project experiences into actionable insight. Track what went well, spotlight what needs attention, and build smarter teams.
+              </p>
+            </div>
 
-          <div className="space-y-4">
-            <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground text-center" data-testid="text-top-issues-heading">
-              Current Top Issues
-            </h2>
-            {isLoading ? (
-              <div className="grid md:grid-cols-3 gap-4 max-w-3xl mx-auto">
-                {[1, 2, 3].map((i) => (
-                  <Skeleton key={i} className="h-24 w-full rounded-md" />
-                ))}
-              </div>
-            ) : topSubcategories.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center">No scored issues yet. Sign in to start recording lessons.</p>
-            ) : (
-              <div className="grid md:grid-cols-3 gap-4 max-w-3xl mx-auto">
-                {topSubcategories.map((sub, index) => (
-                  <Card key={sub.id} className="p-4 space-y-2" data-testid={`card-top-subcategory-${index}`}>
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium truncate" data-testid={`text-subcategory-name-${index}`}>{sub.name}</p>
-                        <p className="text-xs text-muted-foreground truncate">{sub.categoryName}</p>
+            <Card className="p-5 space-y-4">
+              <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground" data-testid="text-top-issues-heading">
+                Current Top Issues
+              </h2>
+              {isLoading ? (
+                <div className="space-y-3">
+                  {[1, 2, 3].map((i) => (
+                    <Skeleton key={i} className="h-14 w-full rounded-md" />
+                  ))}
+                </div>
+              ) : topSubcategories.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No scored issues yet. Sign in to start recording lessons.</p>
+              ) : (
+                <div className="space-y-3">
+                  {topSubcategories.map((sub, index) => (
+                    <div key={sub.id} className="space-y-1.5" data-testid={`card-top-subcategory-${index}`}>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium truncate" data-testid={`text-subcategory-name-${index}`}>{sub.name}</p>
+                          <p className="text-xs text-muted-foreground truncate">{sub.categoryName}</p>
+                        </div>
+                        <div className={`flex items-center gap-1 flex-shrink-0 ${getScoreColor(sub.effectiveScore)}`}>
+                          <TrendingDown className="w-3.5 h-3.5" />
+                          <span className="text-sm font-mono font-semibold" data-testid={`text-score-${index}`}>
+                            {sub.effectiveScore.toLocaleString()}
+                          </span>
+                        </div>
                       </div>
-                      <div className={`flex items-center gap-1 flex-shrink-0 ${getScoreColor(sub.effectiveScore)}`}>
-                        <TrendingDown className="w-3.5 h-3.5" />
-                        <span className="text-sm font-mono font-semibold" data-testid={`text-score-${index}`}>
-                          {sub.effectiveScore.toLocaleString()}
-                        </span>
+                      <div className="h-1.5 rounded-sm bg-muted overflow-hidden">
+                        <div
+                          className={`h-full rounded-sm transition-all ${getScoreBarColor(sub.effectiveScore)}`}
+                          style={{ width: `${getScoreBarWidth(sub.effectiveScore)}%` }}
+                        />
                       </div>
                     </div>
-                    <div className="h-1.5 rounded-sm bg-muted overflow-hidden">
-                      <div
-                        className={`h-full rounded-sm transition-all ${getScoreBarColor(sub.effectiveScore)}`}
-                        style={{ width: `${getScoreBarWidth(sub.effectiveScore)}%` }}
-                      />
-                    </div>
-                  </Card>
-                ))}
-              </div>
-            )}
+                  ))}
+                </div>
+              )}
+            </Card>
           </div>
 
           <Card className="max-w-sm mx-auto p-6 space-y-4">
