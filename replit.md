@@ -61,6 +61,9 @@ client/src/components/     - Sidebar, Filters, LessonDetailDialog, ThemeToggle
 - Template generation uses `exceljs` library for styling; upload parsing uses `xlsx` (SheetJS)
 
 ## Recent Changes
+- 2026-02-14: Added User Settings page (/settings) with avatar upload via object storage and profile editing (first/last name)
+- 2026-02-14: Integrated object storage for user avatar file uploads with presigned URL flow
+- 2026-02-14: Added GET/PATCH /api/user/profile endpoints for user profile management
 - 2026-02-13: Split Administration page into two: Reference Data page (/admin) and User Administration page (/user-admin)
 - 2026-02-13: Added User Management section to Admin page: add/remove user IDs, download all users as CSV (with admin flag)
 - 2026-02-13: Renamed Superadministrator role to Admin; users can only see Dashboard and Projects

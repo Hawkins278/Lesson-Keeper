@@ -2,6 +2,7 @@ import type { Express, RequestHandler } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
+import { registerObjectStorageRoutes, ObjectStorageService } from "./replit_integrations/object_storage";
 import multer from "multer";
 import * as XLSX from "xlsx";
 import ExcelJS from "exceljs";
@@ -38,6 +39,7 @@ export async function registerRoutes(
 ): Promise<Server> {
   await setupAuth(app);
   registerAuthRoutes(app);
+  registerObjectStorageRoutes(app);
 
   app.get("/api/projects", isAuthenticated, async (_req, res) => {
     try {
@@ -831,6 +833,50 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Upload error:", error);
       res.status(500).json({ message: "Failed to process upload" });
+    }
+  });
+
+  const objectStorageService = new ObjectStorageService();
+
+  app.get("/api/user/profile", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub;
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+      const user = await storage.getUserById(userId);
+      if (!user) return res.status(404).json({ message: "User not found" });
+      res.json(user);
+    } catch (error) {
+      console.error("Error fetching user profile:", error);
+      res.status(500).json({ message: "Failed to fetch profile" });
+    }
+  });
+
+  app.patch("/api/user/profile", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.claims?.sub;
+      if (!userId) return res.status(401).json({ message: "Unauthorized" });
+      const { firstName, lastName, profileImageUrl } = req.body;
+      const updateData: { firstName?: string; lastName?: string; profileImageUrl?: string } = {};
+      if (firstName !== undefined) updateData.firstName = firstName;
+      if (lastName !== undefined) updateData.lastName = lastName;
+      if (profileImageUrl !== undefined) {
+        if (profileImageUrl) {
+          const normalizedPath = objectStorageService.normalizeObjectEntityPath(profileImageUrl);
+          await objectStorageService.trySetObjectEntityAclPolicy(normalizedPath, {
+            owner: userId,
+            visibility: "public",
+          });
+          updateData.profileImageUrl = normalizedPath;
+        } else {
+          updateData.profileImageUrl = profileImageUrl;
+        }
+      }
+      const updated = await storage.updateUserProfile(userId, updateData);
+      if (!updated) return res.status(404).json({ message: "User not found" });
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating user profile:", error);
+      res.status(500).json({ message: "Failed to update profile" });
     }
   });
 

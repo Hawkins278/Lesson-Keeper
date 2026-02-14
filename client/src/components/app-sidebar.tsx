@@ -1,5 +1,5 @@
 import { useLocation, Link } from "wouter";
-import { Upload, LayoutDashboard, LogOut, FolderOpen, Settings, Users } from "lucide-react";
+import { Upload, LayoutDashboard, LogOut, FolderOpen, Settings, Users, UserCog } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -33,6 +33,7 @@ function isAdmin(role?: string | null): boolean {
 const userNavItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Projects", url: "/projects", icon: FolderOpen },
+  { title: "User Settings", url: "/settings", icon: UserCog },
 ];
 
 const adminOnlyNavItems = [

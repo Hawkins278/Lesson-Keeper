@@ -15,6 +15,7 @@ import UploadPage from "@/pages/upload";
 import ProjectsPage from "@/pages/projects";
 import AdminPage from "@/pages/admin";
 import UserAdminPage from "@/pages/user-admin";
+import SettingsPage from "@/pages/settings";
 import { Skeleton } from "@/components/ui/skeleton";
 import hawkinsLogo from "@assets/Hawkins-Digital_1770883345237.jpg";
 import citbLogo from "@assets/citb_logo_1770915007635.png";
@@ -55,7 +56,7 @@ function AuthenticatedApp() {
               <img src={hermitIcon} alt="LessonKeeper" className="h-[72px] w-[72px] rounded-md object-cover" data-testid="img-hermit-icon" />
             </div>
             <div className="flex items-center gap-2">
-              <img src={citbLogo} alt="CITB" className="h-[108px] w-[108px] rounded-md object-contain" data-testid="img-citb-logo" />
+              <a href="https://www.citb.co.uk" target="_blank" rel="noopener noreferrer"><img src={citbLogo} alt="CITB" className="h-[108px] w-[108px] rounded-md object-contain" data-testid="img-citb-logo" /></a>
               <ThemeToggle />
             </div>
           </header>
@@ -66,13 +67,14 @@ function AuthenticatedApp() {
               <Route path="/projects" component={ProjectsPage} />
               <Route path="/admin" component={AdminPage} />
               <Route path="/user-admin" component={UserAdminPage} />
+              <Route path="/settings" component={SettingsPage} />
               <Route component={NotFound} />
             </Switch>
           </main>
           <footer className="border-t bg-background">
             <div className="px-4 py-1.5 flex flex-wrap items-center justify-between gap-4 text-sm text-muted-foreground">
               <div className="flex items-center gap-3">
-                <img src={hawkinsLogo} alt="Hawkins-Digital" className="h-[52px] w-[52px] rounded-md object-cover" data-testid="img-footer-logo" />
+                <a href="https://www.hawkins-digital.com" target="_blank" rel="noopener noreferrer"><img src={hawkinsLogo} alt="Hawkins-Digital" className="h-[52px] w-[52px] rounded-md object-cover" data-testid="img-footer-logo" /></a>
                 <span className="align-super text-[0.45rem]">TM</span>
                 <span className="text-[0.9rem] text-muted-foreground">A Hawkins-Digital<span className="align-super text-[0.5rem]">TM</span> product</span>
               </div>
