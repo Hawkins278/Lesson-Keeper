@@ -798,7 +798,7 @@ export async function registerRoutes(
         const impactId = matchedImpact ? matchedImpact.id : null;
         const weightingMultiplier = matchedImpact ? matchedImpact.weightingPercent / 100 : 1;
 
-        if (lesson.type === "CouldHaveGoneBetter") {
+        {
           const now = new Date();
           if (!subcategory.firstRecordedDate) {
             await storage.createSubcategoryFirstRecorded(subcategory.id, now);

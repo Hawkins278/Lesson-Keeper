@@ -186,7 +186,7 @@ export default function Dashboard() {
       ? buildGroups.wentWell
       : buildGroups.all;
 
-  const showScores = isCBB || isAll;
+  const showScores = true;
 
   return (
     <div className="p-6 space-y-5">
