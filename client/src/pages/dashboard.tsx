@@ -1,14 +1,17 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { ChevronDown, ChevronRight, AlertTriangle, CheckCircle2, TrendingDown, List } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Separator } from "@/components/ui/separator";
+import { ChevronDown, ChevronRight, AlertTriangle, CheckCircle2, TrendingDown, List, FileSpreadsheet, Eye, Download, Loader2 } from "lucide-react";
 import { Filters, type FilterState } from "@/components/filters";
 import { LessonDetailDialog } from "@/components/lesson-detail-dialog";
 import { useAuth } from "@/hooks/use-auth";
+import { useToast } from "@/hooks/use-toast";
 import type { Lesson, Project, LessonCategory, LessonSubcategory, ReferenceValue, ImpactLevel, ScoringConfig } from "@shared/schema";
 
 interface LessonWithRelations extends Lesson {
@@ -52,8 +55,31 @@ function getScoreBarColor(score: number) {
   return "bg-cbb/30";
 }
 
+function buildFilterSummary(filters: FilterState, activeTab: TabType, categories: LessonCategory[], subcategories: LessonSubcategory[]) {
+  const parts: { label: string; value: string }[] = [];
+  const tabLabel = activeTab === "could-be-better" ? "Could Be Better" : activeTab === "went-well" ? "Went Well" : "All Lessons";
+  parts.push({ label: "View", value: tabLabel });
+  if (filters.projectType) parts.push({ label: "Project Type", value: filters.projectType });
+  if (filters.phase) parts.push({ label: "Phase", value: filters.phase });
+  if (filters.categoryId) {
+    const cat = categories.find(c => c.id === parseInt(filters.categoryId!));
+    parts.push({ label: "Category", value: cat?.name || filters.categoryId });
+  }
+  if (filters.subcategoryId) {
+    const sub = subcategories.find(s => s.id === parseInt(filters.subcategoryId!));
+    parts.push({ label: "Subcategory", value: sub?.name || filters.subcategoryId });
+  }
+  if (filters.search) parts.push({ label: "Search", value: `"${filters.search}"` });
+  return parts;
+}
+
+function hasActiveFilters(filters: FilterState) {
+  return filters.projectType !== null || filters.phase !== null || filters.categoryId !== null || filters.subcategoryId !== null || filters.search !== "";
+}
+
 export default function Dashboard() {
   const { user } = useAuth();
+  const { toast } = useToast();
   const userRole = (user?.role as string || "").toLowerCase().trim();
   const isAdminUser = userRole === "admin" || userRole === "superadmin" || userRole === "superadministrator";
   const [activeTab, setActiveTab] = useState<TabType>("could-be-better");
@@ -66,6 +92,8 @@ export default function Dashboard() {
   });
   const [selectedLesson, setSelectedLesson] = useState<LessonWithRelations | null>(null);
   const [expandedSubcategories, setExpandedSubcategories] = useState<Set<number>>(new Set());
+  const [showFullList, setShowFullList] = useState(false);
+  const [downloading, setDownloading] = useState(false);
 
   const { data: lessons = [], isLoading: lessonsLoading } = useQuery<LessonWithRelations[]>({
     queryKey: ["/api/lessons"],
@@ -164,6 +192,39 @@ export default function Dashboard() {
     });
   };
 
+  const buildExportParams = useCallback(() => {
+    const params = new URLSearchParams();
+    params.set("tab", activeTab);
+    if (filters.projectType) params.set("projectType", filters.projectType);
+    if (filters.phase) params.set("phase", filters.phase);
+    if (filters.categoryId) params.set("categoryId", filters.categoryId);
+    if (filters.subcategoryId) params.set("subcategoryId", filters.subcategoryId);
+    if (filters.search) params.set("search", filters.search);
+    return params.toString();
+  }, [activeTab, filters]);
+
+  const handleDownloadExcel = useCallback(async () => {
+    setDownloading(true);
+    try {
+      const resp = await fetch(`/api/lessons/export?${buildExportParams()}`, { credentials: "include" });
+      if (!resp.ok) throw new Error("Export failed");
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "dashboard_lessons_export.xlsx";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast({ title: "Download started", description: "Your lessons export is downloading." });
+    } catch {
+      toast({ title: "Export failed", description: "Could not download the lessons export.", variant: "destructive" });
+    } finally {
+      setDownloading(false);
+    }
+  }, [buildExportParams, toast]);
+
   const couldBeBetterCount = lessons.filter((l) => l.type === "CouldHaveGoneBetter").length;
   const wentWellCount = lessons.filter((l) => l.type === "WentWell").length;
   const allCount = lessons.length;
@@ -192,6 +253,8 @@ export default function Dashboard() {
       : buildGroups.all;
 
   const showScores = true;
+  const totalFilteredLessons = activeGroups.reduce((sum, g) => sum + g.lessons.length, 0);
+  const filterSummary = buildFilterSummary(filters, activeTab, categories, subcategories);
 
   return (
     <div className="p-6 space-y-5">
@@ -243,6 +306,31 @@ export default function Dashboard() {
           referencePhases={refData?.projectPhases || []}
         />
       </Card>
+
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <p className="text-sm text-muted-foreground" data-testid="text-lesson-count">
+          {totalFilteredLessons} lesson{totalFilteredLessons !== 1 ? "s" : ""} across {activeGroups.length} subcategor{activeGroups.length !== 1 ? "ies" : "y"}
+        </p>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setShowFullList(true)}
+            data-testid="button-view-full-list"
+          >
+            <Eye className="w-4 h-4 mr-1.5" />
+            View Full List
+          </Button>
+          <Button
+            variant="outline"
+            onClick={handleDownloadExcel}
+            disabled={downloading}
+            data-testid="button-download-lessons"
+          >
+            {downloading ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Download className="w-4 h-4 mr-1.5" />}
+            Download Excel
+          </Button>
+        </div>
+      </div>
 
       <div className="space-y-2">
         {activeGroups.length === 0 ? (
@@ -347,6 +435,134 @@ export default function Dashboard() {
           })
         )}
       </div>
+
+      <Dialog open={showFullList} onOpenChange={setShowFullList}>
+        <DialogContent className="max-w-4xl max-h-[85vh] flex flex-col" data-testid="dialog-full-lesson-list">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileSpreadsheet className="w-5 h-5" />
+              Full Lesson List
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap" data-testid="text-filter-summary">
+              {!hasActiveFilters(filters) ? (
+                <span className="text-sm text-muted-foreground">No filters applied</span>
+              ) : (
+                filterSummary.filter(f => f.label !== "View").map((f, i) => (
+                  <Badge key={i} variant="secondary" className="text-xs no-default-active-elevate no-default-hover-elevate">
+                    {f.label}: {f.value}
+                  </Badge>
+                ))
+              )}
+              <Badge variant="outline" className="text-xs no-default-active-elevate no-default-hover-elevate" data-testid="badge-view-type">
+                {filterSummary.find(f => f.label === "View")?.value}
+              </Badge>
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge variant="secondary" className="text-xs no-default-active-elevate no-default-hover-elevate" data-testid="badge-total-count">
+                {totalFilteredLessons} lesson{totalFilteredLessons !== 1 ? "s" : ""}
+              </Badge>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleDownloadExcel}
+                disabled={downloading}
+                data-testid="button-dialog-download"
+              >
+                {downloading ? <Loader2 className="w-4 h-4 mr-1.5 animate-spin" /> : <Download className="w-4 h-4 mr-1.5" />}
+                Download Excel
+              </Button>
+            </div>
+          </div>
+
+          <Separator />
+
+          <div className="flex-1 overflow-y-auto space-y-4 pr-1">
+            {activeGroups.length === 0 ? (
+              <div className="p-8 text-center">
+                <List className="w-10 h-10 mx-auto text-muted-foreground/40 mb-3" />
+                <p className="text-sm text-muted-foreground">No lessons found matching your filters.</p>
+              </div>
+            ) : (
+              activeGroups.map((group) => (
+                <div key={group.subcategory.id} data-testid={`fulllist-group-${group.subcategory.id}`}>
+                  <div className="flex items-center justify-between gap-3 mb-2 flex-wrap">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="font-semibold text-sm">{group.subcategory.name}</span>
+                      <span className="text-xs text-muted-foreground">({group.category.name})</span>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <Badge variant="secondary" className="text-xs no-default-active-elevate no-default-hover-elevate">
+                        {group.lessons.length} lesson{group.lessons.length !== 1 ? "s" : ""}
+                      </Badge>
+                      {group.effectiveScore > 0 && (
+                        <div className="flex items-center gap-1">
+                          <TrendingDown className={`w-3 h-3 ${getScoreColor(group.effectiveScore)}`} />
+                          <span className={`text-xs font-mono font-semibold ${getScoreColor(group.effectiveScore)}`}>
+                            {group.effectiveScore.toLocaleString()}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    {group.lessons.map((lesson) => {
+                      const lessonIsCBB = lesson.type === "CouldHaveGoneBetter";
+                      return (
+                        <Card
+                          key={lesson.id}
+                          className="p-3 overflow-visible hover-elevate cursor-pointer"
+                          onClick={() => setSelectedLesson(lesson)}
+                          data-testid={`fulllist-lesson-${lesson.id}`}
+                        >
+                          <div className="flex items-start gap-2.5">
+                            <div className={`w-1 min-h-[3rem] rounded-full flex-shrink-0 mt-0.5 ${lessonIsCBB ? "bg-cbb" : "bg-ww"}`} />
+                            <div className="flex-1 min-w-0 space-y-1.5">
+                              <div className="flex items-center justify-between gap-3 flex-wrap">
+                                <p className="text-sm font-medium">
+                                  <span className="text-muted-foreground font-mono mr-1.5">#{lesson.id}</span>
+                                  {lesson.name}
+                                </p>
+                                <div className="flex items-center gap-1.5 flex-shrink-0 flex-wrap">
+                                  {lessonIsCBB && lesson.impact && (
+                                    <Badge variant="outline" className="text-xs no-default-active-elevate">
+                                      {lesson.impact.description} ({lesson.impact.weightingPercent}%)
+                                    </Badge>
+                                  )}
+                                  <Badge
+                                    className={`text-xs no-default-active-elevate ${lessonIsCBB ? "bg-cbb/15 text-cbb border-cbb/30" : "bg-ww/15 text-ww border-ww/30"}`}
+                                    variant="outline"
+                                  >
+                                    {lessonIsCBB ? "CBB" : "WW"}
+                                  </Badge>
+                                  <Badge variant="outline" className="text-xs no-default-active-elevate">{lesson.phase}</Badge>
+                                </div>
+                              </div>
+                              <p className="text-xs text-muted-foreground">
+                                {lesson.project?.name || "—"} · {lesson.category?.name} · {lesson.subcategory?.name}
+                              </p>
+                              <p className="text-xs text-muted-foreground/80 line-clamp-2">
+                                {lesson.eventDescription || "No event description provided"}
+                              </p>
+                              <p className="text-xs">
+                                <span className="font-medium">Key Learning:</span>{" "}
+                                <span className="text-muted-foreground">{lesson.keyLearningOrAction || "Not provided"}</span>
+                              </p>
+                            </div>
+                          </div>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                  <Separator className="mt-4" />
+                </div>
+              ))
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <LessonDetailDialog
         lesson={selectedLesson}

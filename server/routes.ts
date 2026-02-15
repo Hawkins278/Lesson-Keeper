@@ -239,6 +239,153 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/lessons/export", isAuthenticated, async (req: any, res) => {
+    try {
+      const { projectType, phase, categoryId, subcategoryId, search, tab } = req.query as Record<string, string | undefined>;
+      const allLessons = await storage.getLessons();
+      const allSubcategories = await storage.getSubcategories();
+      const allCategories = await storage.getCategories();
+      const scoringConfigData = await storage.getScoringConfig();
+      const dailyDecrement = scoringConfigData?.dailyDecrement ?? 1;
+
+      let filtered = allLessons;
+      if (projectType) filtered = filtered.filter(l => l.project?.projectType === projectType);
+      if (phase) filtered = filtered.filter(l => l.phase === phase);
+      if (categoryId) {
+        const catId = parseInt(categoryId);
+        filtered = filtered.filter(l => {
+          const sub = l.subcategory || allSubcategories.find(s => s.id === l.subcategoryId);
+          return sub && sub.categoryId === catId;
+        });
+      }
+      if (subcategoryId) {
+        const subId = parseInt(subcategoryId);
+        filtered = filtered.filter(l => l.subcategoryId === subId);
+      }
+      if (search) {
+        const s = search.toLowerCase();
+        filtered = filtered.filter(l =>
+          l.name.toLowerCase().includes(s) ||
+          (l.eventDescription || "").toLowerCase().includes(s) ||
+          (l.keyLearningOrAction || "").toLowerCase().includes(s)
+        );
+      }
+
+      if (tab === "could-be-better") filtered = filtered.filter(l => l.type === "CouldHaveGoneBetter");
+      else if (tab === "went-well") filtered = filtered.filter(l => l.type === "WentWell");
+
+      const groups = new Map<number, { subcategory: any; category: any; lessons: typeof filtered; effectiveScore: number }>();
+      for (const lesson of filtered) {
+        const sub = lesson.subcategory || allSubcategories.find(s => s.id === lesson.subcategoryId);
+        const cat = sub ? (lesson.category || allCategories.find(c => c.id === sub.categoryId)) : undefined;
+        if (!sub || !cat) continue;
+        if (!groups.has(sub.id)) {
+          const now = new Date();
+          const lastUpdate = sub.lastScoreUpdatedAt ? new Date(sub.lastScoreUpdatedAt) : now;
+          const daysSince = Math.floor((now.getTime() - lastUpdate.getTime()) / (1000 * 60 * 60 * 24));
+          const effectiveScore = Math.round(Math.max(0, (sub.currentScore || 0) - daysSince * dailyDecrement));
+          groups.set(sub.id, { subcategory: sub, category: cat, lessons: [], effectiveScore });
+        }
+        groups.get(sub.id)!.lessons.push(lesson);
+      }
+      const sortedGroups = Array.from(groups.values()).sort((a, b) => b.effectiveScore - a.effectiveScore);
+
+      const wb = new ExcelJS.Workbook();
+      const ws = wb.addWorksheet("Dashboard Lessons");
+
+      const headerFill: ExcelJS.Fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1F3864" } };
+      const headerFont: Partial<ExcelJS.Font> = { bold: true, color: { argb: "FFFFFFFF" }, size: 11 };
+      const colHeaderFill: ExcelJS.Fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFD6E4F0" } };
+      const colHeaderFont: Partial<ExcelJS.Font> = { bold: true, size: 10 };
+      const groupFill: ExcelJS.Fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFEDF2F9" } };
+      const groupFont: Partial<ExcelJS.Font> = { bold: true, size: 10 };
+
+      let rowIdx = 1;
+
+      ws.addRow(["APPLIED FILTERS"]);
+      const filterHeaderRow = ws.getRow(rowIdx);
+      filterHeaderRow.eachCell((cell) => { cell.fill = headerFill; cell.font = headerFont; });
+      ws.mergeCells(`A${rowIdx}:J${rowIdx}`);
+      rowIdx++;
+
+      const tabLabel = tab === "could-be-better" ? "Could Be Better" : tab === "went-well" ? "Went Well" : "All Lessons";
+      const filterParts: string[] = [];
+      if (projectType) filterParts.push(`Project Type: ${projectType}`);
+      if (phase) filterParts.push(`Phase: ${phase}`);
+      if (categoryId) {
+        const cat = allCategories.find(c => c.id === parseInt(categoryId));
+        filterParts.push(`Category: ${cat?.name || categoryId}`);
+      }
+      if (subcategoryId) {
+        const sub = allSubcategories.find(s => s.id === parseInt(subcategoryId));
+        filterParts.push(`Subcategory: ${sub?.name || subcategoryId}`);
+      }
+      if (search) filterParts.push(`Search: "${search}"`);
+      const filterText = filterParts.length > 0
+        ? `View: ${tabLabel} | ${filterParts.join(" | ")}`
+        : `View: ${tabLabel} | No additional filters applied`;
+
+      ws.addRow([filterText]);
+      ws.mergeCells(`A${rowIdx}:J${rowIdx}`);
+      rowIdx++;
+
+      ws.addRow([]);
+      rowIdx++;
+
+      ws.addRow(["LESSONS (Ordered by Subcategory Score)"]);
+      const lessonsHeaderRow = ws.getRow(rowIdx);
+      lessonsHeaderRow.eachCell((cell) => { cell.fill = headerFill; cell.font = headerFont; });
+      ws.mergeCells(`A${rowIdx}:J${rowIdx}`);
+      rowIdx++;
+
+      const colHeaders = ["#", "Type", "Category", "Subcategory", "Subcategory Score", "Phase", "Impact Level", "Weighting %", "Lesson Name", "Event Description", "Key Learning / Action", "Project"];
+      ws.addRow(colHeaders);
+      const colRow = ws.getRow(rowIdx);
+      colRow.eachCell((cell) => { cell.fill = colHeaderFill; cell.font = colHeaderFont; });
+      rowIdx++;
+
+      for (const group of sortedGroups) {
+        ws.addRow([`${group.category.name} > ${group.subcategory.name} (Score: ${group.effectiveScore})`]);
+        const gRow = ws.getRow(rowIdx);
+        gRow.eachCell((cell) => { cell.fill = groupFill; cell.font = groupFont; });
+        ws.mergeCells(`A${rowIdx}:L${rowIdx}`);
+        rowIdx++;
+
+        for (const lesson of group.lessons) {
+          ws.addRow([
+            lesson.id,
+            lesson.type === "WentWell" ? "Went Well" : "Could Have Gone Better",
+            lesson.category?.name || group.category.name,
+            lesson.subcategory?.name || group.subcategory.name,
+            group.effectiveScore,
+            lesson.phase || "",
+            lesson.impact?.description || "",
+            lesson.impact?.weightingPercent ?? "",
+            lesson.name || "",
+            lesson.eventDescription || "",
+            lesson.keyLearningOrAction || "",
+            lesson.project?.name || "",
+          ]);
+          rowIdx++;
+        }
+      }
+
+      ws.columns = [
+        { width: 6 }, { width: 22 }, { width: 18 }, { width: 22 },
+        { width: 10 }, { width: 14 }, { width: 18 }, { width: 12 },
+        { width: 30 }, { width: 40 }, { width: 40 }, { width: 25 },
+      ];
+
+      const buf = await wb.xlsx.writeBuffer();
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", `attachment; filename="dashboard_lessons_export.xlsx"`);
+      res.send(Buffer.from(buf as ArrayBuffer));
+    } catch (error) {
+      console.error("Error exporting dashboard lessons:", error);
+      res.status(500).json({ message: "Failed to export dashboard lessons" });
+    }
+  });
+
   app.get("/api/reference-data", isAuthenticated, async (_req, res) => {
     try {
       const allCategories = await storage.getCategories();

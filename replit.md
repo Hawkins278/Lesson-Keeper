@@ -66,6 +66,8 @@ client/src/components/     - Sidebar, Filters, LessonDetailDialog, ThemeToggle
 - Template generation uses `exceljs` library for styling; upload parsing uses `xlsx` (SheetJS)
 
 ## Recent Changes
+- 2026-02-15: Added Full Lesson List dialog on Dashboard with filter summary, lesson details, and Excel download
+- 2026-02-15: Added GET /api/lessons/export endpoint with filter query params for dashboard Excel export
 - 2026-02-15: Added Scoring Rates page (/scoring-rates) with configurable scoring parameters and impact level management
 - 2026-02-15: Created scoring_config table with initialScore (500), incrementScore (250), dailyDecrement (1) defaults
 - 2026-02-15: Moved Impact Levels from Reference Data page to Scoring Rates page
