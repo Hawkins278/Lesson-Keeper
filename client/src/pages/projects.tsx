@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
-import { FolderOpen, CalendarDays, User, FileText, ChevronDown, ChevronRight, Loader2, Pencil, X, Save } from "lucide-react";
+import { FolderOpen, CalendarDays, User, ChevronDown, ChevronRight, Loader2, Pencil, X, Save, Download, List, LayoutGrid } from "lucide-react";
 import { LessonDetailDialog } from "@/components/lesson-detail-dialog";
 import { formatUKDate } from "@/lib/format-date";
 import { useAuth } from "@/hooks/use-auth";
@@ -53,12 +53,80 @@ function groupLessonsByCategoryAndSubcategory(lessons: EnrichedLesson[]): Catego
     .sort((a, b) => a.category.name.localeCompare(b.category.name));
 }
 
+type ViewMode = "category" | "impact";
+
+function LessonRow({ lesson, onClick }: { lesson: EnrichedLesson; onClick: () => void }) {
+  const isWentWell = lesson.type === "WentWell";
+  return (
+    <div
+      className="flex items-start gap-3 p-3 rounded-md border cursor-pointer hover-elevate"
+      onClick={onClick}
+      data-testid={`card-lesson-${lesson.id}`}
+    >
+      <div className={`w-1 self-stretch rounded-full flex-shrink-0 ${isWentWell ? "bg-ww" : "bg-cbb"}`} />
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium truncate" data-testid={`text-lesson-name-${lesson.id}`}>
+          <span className="text-muted-foreground font-mono mr-1.5">#{lesson.id}</span>{lesson.name}
+        </p>
+        {lesson.eventDescription && (
+          <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">{lesson.eventDescription}</p>
+        )}
+        <div className="flex flex-wrap items-center gap-2 mt-1.5">
+          <Badge
+            className={`text-xs no-default-active-elevate ${isWentWell ? "bg-ww/15 text-ww border-ww/30" : "bg-cbb/15 text-cbb border-cbb/30"}`}
+            variant="outline"
+          >
+            {isWentWell ? "WW" : "CBB"}
+          </Badge>
+          <Badge variant="outline" className="text-xs no-default-active-elevate">{lesson.phase}</Badge>
+          {lesson.impact && (
+            <Badge variant="outline" className="text-xs no-default-active-elevate" data-testid={`badge-impact-${lesson.id}`}>
+              {lesson.impact.description} ({lesson.impact.weightingPercent}%)
+            </Badge>
+          )}
+          {lesson.category && (
+            <Badge variant="secondary" className="text-xs no-default-active-elevate">{lesson.category.name}</Badge>
+          )}
+          {lesson.subcategory && (
+            <Badge variant="secondary" className="text-xs no-default-active-elevate">{lesson.subcategory.name}</Badge>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ProjectLessons({ projectId, isAdmin }: { projectId: number; isAdmin: boolean }) {
   const [selectedLesson, setSelectedLesson] = useState<(EnrichedLesson & { project?: Project }) | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>("impact");
+  const [downloading, setDownloading] = useState(false);
+  const { toast } = useToast();
 
   const { data: lessons = [], isLoading } = useQuery<EnrichedLesson[]>({
     queryKey: ["/api/projects", projectId, "lessons"],
   });
+
+  const handleDownload = async () => {
+    setDownloading(true);
+    try {
+      const res = await fetch(`/api/projects/${projectId}/lessons/export`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to download");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const disposition = res.headers.get("Content-Disposition");
+      const match = disposition?.match(/filename="(.+)"/);
+      a.download = match?.[1] || "project_lessons.xlsx";
+      a.click();
+      URL.revokeObjectURL(url);
+      toast({ title: "Downloaded", description: "Project lessons exported to Excel." });
+    } catch {
+      toast({ title: "Error", description: "Failed to download project lessons.", variant: "destructive" });
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -77,59 +145,79 @@ function ProjectLessons({ projectId, isAdmin }: { projectId: number; isAdmin: bo
     );
   }
 
+  const impactSorted = [...lessons].sort((a, b) => {
+    const wA = a.impact?.weightingPercent ?? 0;
+    const wB = b.impact?.weightingPercent ?? 0;
+    return wB - wA;
+  });
+
   const groups = groupLessonsByCategoryAndSubcategory(lessons);
 
   return (
-    <div className="space-y-4 pt-2">
-      {groups.map((group) => (
-        <div key={group.category.id} className="space-y-2">
-          <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground px-1" data-testid={`text-category-heading-${group.category.id}`}>
-            {group.category.name}
-          </h4>
-          {group.subcategoryGroups.map((subGroup) => (
-            <div key={subGroup.subcategory.id} className="space-y-1">
-              <p className="text-xs font-medium text-muted-foreground/80 pl-3" data-testid={`text-subcategory-heading-${subGroup.subcategory.id}`}>
-                {subGroup.subcategory.name}
-              </p>
-              <div className="space-y-1.5 pl-3">
-                {subGroup.lessons.map((lesson) => {
-                  const isWentWell = lesson.type === "WentWell";
-                  return (
-                    <div
-                      key={lesson.id}
-                      className="flex items-start gap-3 p-3 rounded-md border cursor-pointer hover-elevate"
-                      onClick={() => setSelectedLesson(lesson)}
-                      data-testid={`card-lesson-${lesson.id}`}
-                    >
-                      <div className={`w-1 self-stretch rounded-full flex-shrink-0 ${isWentWell ? "bg-ww" : "bg-cbb"}`} />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium truncate" data-testid={`text-lesson-name-${lesson.id}`}><span className="text-muted-foreground font-mono mr-1.5">#{lesson.id}</span>{lesson.name}</p>
-                        {lesson.eventDescription && (
-                          <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">{lesson.eventDescription}</p>
-                        )}
-                        <div className="flex flex-wrap items-center gap-2 mt-1.5">
-                          <Badge
-                            className={`text-xs no-default-active-elevate ${isWentWell ? "bg-ww/15 text-ww border-ww/30" : "bg-cbb/15 text-cbb border-cbb/30"}`}
-                            variant="outline"
-                          >
-                            {isWentWell ? "WW" : "CBB"}
-                          </Badge>
-                          <Badge variant="outline" className="text-xs no-default-active-elevate">{lesson.phase}</Badge>
-                          {!isWentWell && lesson.impact && (
-                            <Badge variant="outline" className="text-xs no-default-active-elevate" data-testid={`badge-impact-${lesson.id}`}>
-                              {lesson.impact.weightingPercent}%
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+    <div className="space-y-3 pt-2">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-1">
+          <Button
+            variant={viewMode === "impact" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setViewMode("impact")}
+            data-testid="button-view-by-impact"
+          >
+            <List className="w-3.5 h-3.5 mr-1.5" />
+            By Impact
+          </Button>
+          <Button
+            variant={viewMode === "category" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setViewMode("category")}
+            data-testid="button-view-by-category"
+          >
+            <LayoutGrid className="w-3.5 h-3.5 mr-1.5" />
+            By Category
+          </Button>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleDownload}
+          disabled={downloading}
+          data-testid={`button-download-lessons-${projectId}`}
+        >
+          {downloading ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Download className="w-3.5 h-3.5 mr-1.5" />}
+          Export to Excel
+        </Button>
+      </div>
+
+      {viewMode === "impact" ? (
+        <div className="space-y-1.5">
+          {impactSorted.map((lesson) => (
+            <LessonRow key={lesson.id} lesson={lesson} onClick={() => setSelectedLesson(lesson)} />
+          ))}
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {groups.map((group) => (
+            <div key={group.category.id} className="space-y-2">
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground px-1" data-testid={`text-category-heading-${group.category.id}`}>
+                {group.category.name}
+              </h4>
+              {group.subcategoryGroups.map((subGroup) => (
+                <div key={subGroup.subcategory.id} className="space-y-1">
+                  <p className="text-xs font-medium text-muted-foreground/80 pl-3" data-testid={`text-subcategory-heading-${subGroup.subcategory.id}`}>
+                    {subGroup.subcategory.name}
+                  </p>
+                  <div className="space-y-1.5 pl-3">
+                    {subGroup.lessons.map((lesson) => (
+                      <LessonRow key={lesson.id} lesson={lesson} onClick={() => setSelectedLesson(lesson)} />
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
           ))}
         </div>
-      ))}
+      )}
+
       <LessonDetailDialog
         lesson={selectedLesson}
         open={!!selectedLesson}

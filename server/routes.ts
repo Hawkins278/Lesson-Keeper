@@ -146,6 +146,89 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/projects/:id/lessons/export", isAuthenticated, async (req: any, res) => {
+    try {
+      const projectId = parseInt(req.params.id);
+      if (isNaN(projectId)) return res.status(400).json({ message: "Invalid project ID" });
+      const project = await storage.getProject(projectId);
+      if (!project) return res.status(404).json({ message: "Project not found" });
+      const projectLessons = await storage.getLessonsByProject(projectId);
+
+      const wb = new ExcelJS.Workbook();
+      const ws = wb.addWorksheet("Project Lessons");
+
+      const headerFill: ExcelJS.Fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1F3864" } };
+      const headerFont: Partial<ExcelJS.Font> = { bold: true, color: { argb: "FFFFFFFF" }, size: 11 };
+      const colHeaderFill: ExcelJS.Fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFD6E4F0" } };
+      const colHeaderFont: Partial<ExcelJS.Font> = { bold: true, size: 10 };
+
+      ws.addRow(["PROJECT DETAILS"]);
+      const projectHeaderRow = ws.getRow(1);
+      projectHeaderRow.eachCell((cell) => { cell.fill = headerFill; cell.font = headerFont; });
+      ws.mergeCells("A1:F1");
+
+      ws.addRow(["Project Name", "Project Type", "Close Date", "Project Manager", "Description"]);
+      const detailHeaderRow = ws.getRow(2);
+      detailHeaderRow.eachCell((cell) => { cell.fill = colHeaderFill; cell.font = colHeaderFont; });
+
+      ws.addRow([
+        project.name,
+        project.projectType,
+        project.closeDate || "",
+        project.projectManager || "",
+        project.description || "",
+      ]);
+
+      ws.addRow([]);
+
+      ws.addRow(["LESSONS (Ordered by Impact Score)"]);
+      const lessonsHeaderRow = ws.getRow(5);
+      lessonsHeaderRow.eachCell((cell) => { cell.fill = headerFill; cell.font = headerFont; });
+      ws.mergeCells("A5:J5");
+
+      const colHeaders = ["#", "Type", "Category", "Subcategory", "Phase", "Impact Level", "Weighting %", "Lesson Name", "Event Description", "Key Learning / Action"];
+      ws.addRow(colHeaders);
+      const colRow = ws.getRow(6);
+      colRow.eachCell((cell) => { cell.fill = colHeaderFill; cell.font = colHeaderFont; });
+
+      const sorted = [...projectLessons].sort((a, b) => {
+        const wA = a.impact?.weightingPercent ?? 0;
+        const wB = b.impact?.weightingPercent ?? 0;
+        return wB - wA;
+      });
+
+      for (const lesson of sorted) {
+        ws.addRow([
+          lesson.id,
+          lesson.type === "WentWell" ? "Went Well" : "Could Have Gone Better",
+          lesson.category?.name || "",
+          lesson.subcategory?.name || "",
+          lesson.phase || "",
+          lesson.impact?.description || "",
+          lesson.impact?.weightingPercent ?? "",
+          lesson.name || "",
+          lesson.eventDescription || "",
+          lesson.keyLearningOrAction || "",
+        ]);
+      }
+
+      ws.columns = [
+        { width: 6 }, { width: 22 }, { width: 18 }, { width: 22 },
+        { width: 14 }, { width: 18 }, { width: 12 }, { width: 30 },
+        { width: 40 }, { width: 40 },
+      ];
+
+      const buf = await wb.xlsx.writeBuffer();
+      const safeName = project.name.replace(/[^a-zA-Z0-9_-]/g, "_").substring(0, 50);
+      res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+      res.setHeader("Content-Disposition", `attachment; filename="${safeName}_lessons.xlsx"`);
+      res.send(Buffer.from(buf as ArrayBuffer));
+    } catch (error) {
+      console.error("Error exporting project lessons:", error);
+      res.status(500).json({ message: "Failed to export project lessons" });
+    }
+  });
+
   app.get("/api/lessons", isAuthenticated, async (_req, res) => {
     try {
       const lessons = await storage.getLessons();
