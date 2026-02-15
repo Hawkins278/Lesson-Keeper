@@ -1,3 +1,21 @@
+/**
+ * server/replit_integrations/auth/replitAuth.ts — Replit OIDC Authentication
+ * 
+ * Handles all authentication flows using Replit's OpenID Connect provider:
+ *   - setupAuth(): Configures session store, passport, and OIDC strategy
+ *   - isAuthenticated: Middleware that validates session + refreshes expired tokens
+ *   - Login flow: /api/login → Replit OIDC → /api/callback → redirect to app
+ *   - Logout flow: /api/logout → Replit end-session endpoint
+ * 
+ * Session management:
+ *   - 7-day session TTL stored in PostgreSQL via connect-pg-simple
+ *   - Cookies: httpOnly + secure (prevents XSS and ensures HTTPS-only)
+ *   - Token refresh: automatically refreshes expired OIDC tokens using refresh_token
+ * 
+ * User upsert: On each login, user profile is created or updated in the database.
+ * Pre-registered users (email-only records) are linked on first login.
+ */
+
 import * as client from "openid-client";
 import { Strategy, type VerifyFunction } from "openid-client/passport";
 
@@ -8,6 +26,7 @@ import memoize from "memoizee";
 import connectPg from "connect-pg-simple";
 import { authStorage } from "./storage";
 
+// Memoized OIDC discovery — caches the provider config for 1 hour to avoid repeated network calls
 const getOidcConfig = memoize(
   async () => {
     return await client.discovery(
@@ -18,6 +37,7 @@ const getOidcConfig = memoize(
   { maxAge: 3600 * 1000 }
 );
 
+// Configures Express session middleware with PostgreSQL-backed session store
 export function getSession() {
   const sessionTtl = 7 * 24 * 60 * 60 * 1000; // 1 week
   const pgStore = connectPg(session);
@@ -40,6 +60,7 @@ export function getSession() {
   });
 }
 
+// Stores OIDC token data in the session object for persistence across requests
 function updateUserSession(
   user: any,
   tokens: client.TokenEndpointResponse & client.TokenEndpointResponseHelpers
@@ -50,6 +71,7 @@ function updateUserSession(
   user.expires_at = user.claims?.exp;
 }
 
+// Creates or updates the user record from OIDC claims on each login
 async function upsertUser(claims: any) {
   await authStorage.upsertUser({
     id: claims["sub"],
@@ -60,6 +82,7 @@ async function upsertUser(claims: any) {
   });
 }
 
+// Initializes authentication middleware: session, passport, OIDC strategy, and auth routes
 export async function setupAuth(app: Express) {
   app.set("trust proxy", 1);
   app.use(getSession());
@@ -130,6 +153,8 @@ export async function setupAuth(app: Express) {
   });
 }
 
+// Authentication middleware — validates session, checks token expiry, auto-refreshes if needed
+// Returns 401 if: not authenticated, token expired with no refresh token, or refresh fails
 export const isAuthenticated: RequestHandler = async (req, res, next) => {
   const user = req.user as any;
 

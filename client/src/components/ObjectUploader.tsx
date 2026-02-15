@@ -1,3 +1,22 @@
+/**
+ * @file ObjectUploader — File upload component backed by presigned URLs and
+ * the Uppy upload library.
+ *
+ * Upload flow:
+ *   1. User clicks the trigger button → Uppy DashboardModal opens.
+ *   2. User selects file(s) in the modal and clicks "Upload".
+ *   3. For each file, Uppy calls `onGetUploadParameters` which should request
+ *      a presigned PUT URL from the backend (e.g. via the object storage
+ *      integration route). The backend returns a signed GCS/S3 URL.
+ *   4. Uppy PUTs the file directly to that presigned URL — the file goes
+ *      straight from the browser to cloud storage, bypassing the app server.
+ *   5. Once all uploads finish, `onComplete` fires so the caller can update
+ *      server-side state (e.g. set ACL, store the object path in the DB).
+ *
+ * The component renders as a plain `<Button>` whose content is controlled
+ * via `children`. The Uppy dashboard modal handles file selection, preview,
+ * drag-and-drop, and progress indication.
+ */
 import { useState } from "react";
 import type { ReactNode } from "react";
 import Uppy from "@uppy/core";
@@ -68,6 +87,15 @@ export function ObjectUploader({
   children,
 }: ObjectUploaderProps) {
   const [showModal, setShowModal] = useState(false);
+
+  // Initialise the Uppy instance once via lazy-init state. The AwsS3
+  // plugin handles presigned-URL uploads: for each file it calls
+  // `onGetUploadParameters` to obtain a signed PUT URL from the backend,
+  // then streams the file directly to cloud storage (GCS / S3).
+  // `shouldUseMultipart: false` forces simple PUT uploads instead of
+  // multipart, which matches the single-part presigned URLs the backend
+  // generates. `autoProceed: false` lets the user review files before
+  // uploading.
   const [uppy] = useState(() =>
     new Uppy({
       restrictions: {

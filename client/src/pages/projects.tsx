@@ -1,3 +1,27 @@
+/**
+ * @file Projects Page — Lists all projects with expandable per-project lesson views.
+ *
+ * @description
+ * Displays every project as a collapsible card. Expanding a project card fetches
+ * its lessons and renders them in one of two view modes:
+ *
+ * - **By Impact** (default) — Flat list sorted descending by impact weighting
+ *   percentage so the highest-impact lessons appear first.
+ * - **By Category** — Lessons grouped hierarchically by category → subcategory,
+ *   sorted alphabetically by category name.
+ *
+ * Additional capabilities:
+ * - **Inline project editing** — Admin users can edit project metadata (name,
+ *   type, manager, close date, description) in place via a PATCH mutation.
+ * - **Excel export** — Each project's lessons can be downloaded as an .xlsx file
+ *   via `/api/projects/:id/lessons/export`. The filename is parsed from the
+ *   Content-Disposition header returned by the server.
+ * - **Lesson detail dialog** — Clicking any lesson row opens a shared
+ *   LessonDetailDialog component for full lesson details and admin actions.
+ *
+ * Access: Available to all authenticated users. Inline editing is restricted
+ * to admin / superadmin roles.
+ */
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
@@ -16,8 +40,10 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Project, Lesson, LessonCategory, LessonSubcategory, ImpactLevel, ReferenceValue } from "@shared/schema";
 
+/** Lesson record enriched with resolved category, subcategory, and impact-level relations. */
 type EnrichedLesson = Lesson & { category?: LessonCategory; subcategory?: LessonSubcategory; impact?: ImpactLevel };
 
+/** A category and its nested subcategory groups, each containing their lessons. */
 interface CategoryGroup {
   category: LessonCategory;
   subcategoryGroups: {
@@ -26,6 +52,12 @@ interface CategoryGroup {
   }[];
 }
 
+/**
+ * Groups lessons into a two-level hierarchy: category → subcategory → lessons.
+ * Uses a nested Map structure for O(1) lookups during grouping.
+ * Lessons without resolved category/subcategory relations are silently skipped.
+ * The final output is sorted alphabetically by category name.
+ */
 function groupLessonsByCategoryAndSubcategory(lessons: EnrichedLesson[]): CategoryGroup[] {
   const categoryMap = new Map<number, { category: LessonCategory; subcatMap: Map<number, { subcategory: LessonSubcategory; lessons: EnrichedLesson[] }> }>();
 
@@ -53,8 +85,10 @@ function groupLessonsByCategoryAndSubcategory(lessons: EnrichedLesson[]): Catego
     .sort((a, b) => a.category.name.localeCompare(b.category.name));
 }
 
+/** Toggle between flat impact-ordered view and hierarchical category view. */
 type ViewMode = "category" | "impact";
 
+/** Renders a single lesson as a clickable card row with type indicator, badges, and metadata. */
 function LessonRow({ lesson, onClick }: { lesson: EnrichedLesson; onClick: () => void }) {
   const isWentWell = lesson.type === "WentWell";
   return (
@@ -96,16 +130,28 @@ function LessonRow({ lesson, onClick }: { lesson: EnrichedLesson; onClick: () =>
   );
 }
 
+/**
+ * Displays lessons belonging to a single project, with two view modes
+ * and an Excel export button. Fetched lazily when the parent project card
+ * is expanded (queryKey includes projectId for per-project caching).
+ */
 function ProjectLessons({ projectId, isAdmin }: { projectId: number; isAdmin: boolean }) {
   const [selectedLesson, setSelectedLesson] = useState<(EnrichedLesson & { project?: Project }) | null>(null);
+  // Default to impact view so highest-weighting lessons surface first
   const [viewMode, setViewMode] = useState<ViewMode>("impact");
   const [downloading, setDownloading] = useState(false);
   const { toast } = useToast();
 
+  // Per-project lesson query — only runs when this component mounts (project expanded)
   const { data: lessons = [], isLoading } = useQuery<EnrichedLesson[]>({
     queryKey: ["/api/projects", projectId, "lessons"],
   });
 
+  /**
+   * Downloads this project's lessons as an Excel file.
+   * Parses the filename from the Content-Disposition header so the downloaded
+   * file is named meaningfully (e.g. "ProjectName_lessons.xlsx").
+   */
   const handleDownload = async () => {
     setDownloading(true);
     try {
@@ -115,6 +161,7 @@ function ProjectLessons({ projectId, isAdmin }: { projectId: number; isAdmin: bo
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
+      // Extract filename from Content-Disposition header, fall back to generic name
       const disposition = res.headers.get("Content-Disposition");
       const match = disposition?.match(/filename="(.+)"/);
       a.download = match?.[1] || "project_lessons.xlsx";
@@ -145,12 +192,15 @@ function ProjectLessons({ projectId, isAdmin }: { projectId: number; isAdmin: bo
     );
   }
 
+  // Sort lessons descending by impact weighting % for the "By Impact" view.
+  // Lessons without an impact level default to 0% so they sink to the bottom.
   const impactSorted = [...lessons].sort((a, b) => {
     const wA = a.impact?.weightingPercent ?? 0;
     const wB = b.impact?.weightingPercent ?? 0;
     return wB - wA;
   });
 
+  // Pre-compute category→subcategory grouping for the "By Category" view
   const groups = groupLessonsByCategoryAndSubcategory(lessons);
 
   return (
@@ -228,6 +278,12 @@ function ProjectLessons({ projectId, isAdmin }: { projectId: number; isAdmin: bo
   );
 }
 
+/**
+ * Inline edit form for project metadata. Replaces the project card content
+ * when editing is active. Uses individual state fields (not react-hook-form)
+ * because the form is small and transient. On save, issues a PATCH request
+ * and invalidates the projects query cache.
+ */
 function ProjectEditForm({ project, onCancel, onSaved }: { project: Project; onCancel: () => void; onSaved: () => void }) {
   const [name, setName] = useState(project.name);
   const [projectType, setProjectType] = useState(project.projectType);
@@ -303,8 +359,10 @@ function ProjectEditForm({ project, onCancel, onSaved }: { project: Project; onC
 
 export default function ProjectsPage() {
   const { user } = useAuth();
+  // Normalise role for case-insensitive admin check
   const userRole = (user?.role as string || "").toLowerCase().trim();
   const isAdminUser = userRole === "admin" || userRole === "superadmin" || userRole === "superadministrator";
+  /** Only one project can be expanded at a time (accordion behaviour). */
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [editingProjectId, setEditingProjectId] = useState<number | null>(null);
 
@@ -312,6 +370,7 @@ export default function ProjectsPage() {
     queryKey: ["/api/projects"],
   });
 
+  /** Accordion toggle: clicking the already-expanded project collapses it; otherwise expands the clicked one. */
   const toggleProject = (id: number) => {
     setExpandedId((prev) => (prev === id ? null : id));
   };

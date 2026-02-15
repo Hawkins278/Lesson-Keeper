@@ -1,8 +1,25 @@
+/**
+ * server/seed.ts — Database seeding
+ * 
+ * Populates the database with initial data on first run:
+ *   1. Reference values: default ProjectType and ProjectPhase dropdown options
+ *   2. Impact levels: 6 severity levels with weighting multipliers (100-175%)
+ *   3. Demo data: 5 sample projects, 4 categories, 8 subcategories, 15 lessons
+ * 
+ * Each seed function checks if data already exists before inserting,
+ * so seeding is safe to run on every server start (idempotent).
+ */
+
 import { storage } from "./storage";
 import { db } from "./db";
 import { lessons, referenceValues, impactLevels } from "@shared/schema";
 import { sql } from "drizzle-orm";
 
+/**
+ * Seeds default reference values for ProjectType and ProjectPhase dropdowns.
+ * These appear in the Excel template and upload validation.
+ * Skips if any reference values already exist.
+ */
 async function seedReferenceValues() {
   const existing = await db.select({ count: sql<number>`count(*)` }).from(referenceValues);
   if (Number(existing[0].count) > 0) return;
@@ -19,6 +36,12 @@ async function seedReferenceValues() {
   console.log("Seeded reference values: project types and phases");
 }
 
+/**
+ * Seeds default impact levels with weighting multipliers.
+ * These are used during upload to multiply the scoring increment:
+ *   175% = most severe impact, 100% = baseline impact
+ * Skips if any impact levels already exist.
+ */
 async function seedImpactLevels() {
   const existing = await db.select({ count: sql<number>`count(*)` }).from(impactLevels);
   if (Number(existing[0].count) > 0) return;
@@ -38,10 +61,16 @@ async function seedImpactLevels() {
   console.log("Seeded impact levels: 6 levels with weightings");
 }
 
+/**
+ * Main seed function — called on every server start.
+ * Seeds reference values and impact levels first (always needed),
+ * then seeds demo project/lesson data only if no lessons exist yet.
+ */
 export async function seedDatabase() {
   await seedReferenceValues();
   await seedImpactLevels();
 
+  // Only seed demo data if the lessons table is completely empty
   const existingLessons = await db.select({ count: sql<number>`count(*)` }).from(lessons);
   if (Number(existingLessons[0].count) > 0) {
     return;
@@ -49,6 +78,7 @@ export async function seedDatabase() {
 
   console.log("Seeding database with example data...");
 
+  // Create 4 lesson categories with 2 subcategories each
   const cat1 = await storage.createCategory({ name: "Governance", description: "Project governance and oversight" });
   const cat2 = await storage.createCategory({ name: "Planning", description: "Project planning and scheduling" });
   const cat3 = await storage.createCategory({ name: "Execution", description: "Project delivery and execution" });
@@ -63,6 +93,7 @@ export async function seedDatabase() {
   const sub7 = await storage.createSubcategory({ categoryId: cat4.id, name: "Stakeholder Engagement", description: "Engaging project stakeholders" });
   const sub8 = await storage.createSubcategory({ categoryId: cat4.id, name: "Team Collaboration", description: "Internal team working practices" });
 
+  // Set initial risk scores for demo subcategories (simulates historical data)
   const now = new Date();
 
   await storage.updateSubcategoryScore(sub1.id, 750, now);
@@ -74,6 +105,7 @@ export async function seedDatabase() {
   await storage.updateSubcategoryScore(sub6.id, 250, now);
   await storage.createSubcategoryFirstRecorded(sub6.id, new Date(now.getTime() - 45 * 24 * 60 * 60 * 1000));
 
+  // Create 5 demo projects across different project types
   const proj1 = await storage.createProject({
     projectType: "IT Change",
     name: "ERP Migration Phase 2",
@@ -114,8 +146,10 @@ export async function seedDatabase() {
     description: "Comprehensive security audit and remediation of cloud infrastructure",
   });
 
+  // Get seeded impact levels for assigning to demo lessons
   const allImpacts = await storage.getImpactLevels();
 
+  // Create 15 demo lessons — mix of "Could Have Gone Better" and "Went Well" types
   const seedLessons = [
     { projectId: proj1.id, subcategoryId: sub1.id, phase: "Planning", type: "CouldHaveGoneBetter" as const, name: "Finance team requirements missed", eventDescription: "The finance department was not engaged during initial requirements gathering, leading to significant rework when their data migration needs were identified late.", keyLearningOrAction: "Create a comprehensive stakeholder map at project initiation and ensure all departments with data dependencies are consulted.", impactId: allImpacts[0]?.id || null },
     { projectId: proj1.id, subcategoryId: sub1.id, phase: "Delivery", type: "CouldHaveGoneBetter" as const, name: "Unclear integration specifications", eventDescription: "Third-party API integration requirements were vaguely documented, causing two sprints of rework when actual API limitations were discovered.", keyLearningOrAction: "Conduct technical spike sessions for all integrations before committing to delivery timelines.", impactId: allImpacts[1]?.id || null },

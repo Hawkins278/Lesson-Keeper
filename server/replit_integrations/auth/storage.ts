@@ -1,3 +1,16 @@
+/**
+ * server/replit_integrations/auth/storage.ts — Authentication user storage
+ * 
+ * Manages user record creation and updates during the OIDC login flow.
+ * The upsertUser() method handles three scenarios:
+ *   1. Returning user: Updates profile data, normalizes legacy role names
+ *   2. Pre-registered user: Links email-only record to OIDC account (replaces UUID with OIDC sub)
+ *   3. New user: Creates record; first user gets "admin" role, subsequent users get "user"
+ * 
+ * Legacy role normalization: "superadmin" and "superadministrator" are converted to "admin"
+ * on each login to support migration from the old role naming convention.
+ */
+
 import { users, type User, type UpsertUser } from "@shared/models/auth";
 import { db } from "../../db";
 import { eq, sql } from "drizzle-orm";
@@ -8,14 +21,32 @@ export interface IAuthStorage {
 }
 
 class AuthStorage implements IAuthStorage {
+  // Fetches a user by their OIDC subject ID
   async getUser(id: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));
     return user;
   }
 
+  /**
+   * Creates or updates a user record on login. Three paths:
+   * 
+   * Path 1 — Returning user (ID match):
+   *   Updates profile fields from OIDC claims. Normalizes legacy roles to "admin".
+   * 
+   * Path 2 — Pre-registered user (email match, no ID match):
+   *   Admin pre-created a record with email only (auto-generated UUID as ID).
+   *   On first OIDC login, replaces the UUID with the real OIDC subject ID,
+   *   preserving the existing role assignment. This links the pre-registration
+   *   to the actual user account.
+   * 
+   * Path 3 — Brand new user (no ID or email match):
+   *   Creates a new record. If no admins exist yet, assigns "admin" role
+   *   (bootstraps the first admin). Otherwise assigns "user" role.
+   */
   async upsertUser(userData: UpsertUser): Promise<User> {
     const existingUser = await this.getUser(userData.id!);
 
+    // Path 1: Returning user — update profile, normalize legacy roles
     if (existingUser) {
       const existingRole = (existingUser.role || "").toLowerCase().trim();
       const normalizedRole = (existingRole === "superadmin" || existingRole === "superadministrator")
@@ -37,6 +68,7 @@ class AuthStorage implements IAuthStorage {
       return user;
     }
 
+    // Path 2: Pre-registered user — match by email (case-insensitive), link OIDC ID
     if (userData.email) {
       const [preRegistered] = await db
         .select()
@@ -49,6 +81,8 @@ class AuthStorage implements IAuthStorage {
           ? "admin"
           : preRegistered.role;
 
+        // Raw SQL update needed to replace the primary key (ID) — Drizzle ORM
+        // doesn't support updating primary keys via the .set() method
         const result = await db.execute(sql`
           UPDATE users SET
             id = ${userData.id!},
@@ -65,6 +99,7 @@ class AuthStorage implements IAuthStorage {
       }
     }
 
+    // Path 3: Brand new user — auto-assign admin if no admins exist yet
     const [adminCount] = await db
       .select({ count: sql<number>`count(*)` })
       .from(users)
@@ -82,4 +117,5 @@ class AuthStorage implements IAuthStorage {
   }
 }
 
+// Singleton auth storage instance
 export const authStorage = new AuthStorage();

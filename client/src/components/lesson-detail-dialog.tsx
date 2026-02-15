@@ -1,3 +1,33 @@
+/**
+ * @file LessonDetailDialog — Modal dialog for viewing (and optionally editing)
+ * a single lesson's full details.
+ *
+ * Displays the lesson's:
+ *   - Name (with numeric ID prefix)
+ *   - Type badge ("Went Well" or "Could Be Better")
+ *   - Phase badge
+ *   - Associated project info (name, type, manager, close date)
+ *   - Category / subcategory
+ *   - Impact level (only shown for "Could Be Better" lessons)
+ *   - Event description ("What Happened")
+ *   - Key learning / action
+ *
+ * When `isAdmin` is true, an edit button appears in the header. Clicking it
+ * switches editable fields (name, event description, key learning, phase,
+ * impact level) into inline form controls. Reference data for phases and
+ * impact levels is lazily fetched only when editing mode is activated
+ * (`enabled: editing`).
+ *
+ * After a successful save the component invalidates both the global lessons
+ * cache and the project-specific lessons cache so that the dashboard and
+ * project detail pages reflect the update immediately.
+ *
+ * @prop {Lesson & { project?, category?, subcategory?, impact? } | null} lesson
+ *   The lesson to display. When `null` the component renders nothing.
+ * @prop {boolean}  open          — Controls dialog visibility.
+ * @prop {(open: boolean) => void} onOpenChange — Callback when visibility changes.
+ * @prop {boolean}  isAdmin       — If true, shows the edit/save controls.
+ */
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
@@ -26,6 +56,9 @@ interface LessonDetailDialogProps {
 }
 
 export function LessonDetailDialog({ lesson, open, onOpenChange, isAdmin }: LessonDetailDialogProps) {
+  // Local editing state — each editable field gets its own state variable
+  // so the user can modify them independently and cancel without affecting
+  // the original lesson data.
   const [editing, setEditing] = useState(false);
   const [editName, setEditName] = useState("");
   const [editEvent, setEditEvent] = useState("");
@@ -34,16 +67,21 @@ export function LessonDetailDialog({ lesson, open, onOpenChange, isAdmin }: Less
   const [editImpactId, setEditImpactId] = useState<string>("");
   const { toast } = useToast();
 
+  // Lazily fetch phase reference data only when editing mode is active.
   const { data: phases = [] } = useQuery<ReferenceValue[]>({
     queryKey: ["/api/reference-data", "ProjectPhase"],
     enabled: editing,
   });
 
+  // Lazily fetch impact levels only when editing mode is active.
   const { data: impactLevels = [] } = useQuery<ImpactLevel[]>({
     queryKey: ["/api/impact-levels"],
     enabled: editing,
   });
 
+  // Mutation to PATCH the lesson. On success, invalidate both the global
+  // lessons list and the project-specific lessons list so the UI stays in
+  // sync across pages.
   const updateMutation = useMutation({
     mutationFn: async (data: { name: string; eventDescription: string; keyLearningOrAction: string; phase: string; impactId: number | null }) => {
       await apiRequest("PATCH", `/api/lessons/${lesson?.id}`, data);
@@ -61,10 +99,15 @@ export function LessonDetailDialog({ lesson, open, onOpenChange, isAdmin }: Less
     },
   });
 
+  // Render nothing when no lesson is selected.
   if (!lesson) return null;
 
+  // Determine the lesson type to conditionally style the badge and
+  // decide whether to show the impact section.
   const isWentWell = lesson.type === "WentWell";
 
+  // Populate edit fields from the current lesson data before entering
+  // editing mode. This ensures the form starts with the existing values.
   const startEdit = () => {
     setEditName(lesson.name);
     setEditEvent(lesson.eventDescription || "");
@@ -78,6 +121,7 @@ export function LessonDetailDialog({ lesson, open, onOpenChange, isAdmin }: Less
     setEditing(false);
   };
 
+  // Fire the PATCH mutation with the current edit-field values.
   const saveEdit = () => {
     updateMutation.mutate({
       name: editName,
@@ -88,6 +132,8 @@ export function LessonDetailDialog({ lesson, open, onOpenChange, isAdmin }: Less
     });
   };
 
+  // When the dialog closes (o === false), reset editing mode so the
+  // next open starts in read-only view.
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) setEditing(false); onOpenChange(o); }}>
       <DialogContent className="max-w-lg">

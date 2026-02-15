@@ -1,9 +1,43 @@
+/**
+ * @file Filters — Dashboard filter bar with cascading dropdowns and text search.
+ *
+ * Provides a horizontal row of filter controls that narrow down the lessons
+ * displayed on the dashboard. The filters are:
+ *   1. **Search** — free-text search across lesson fields.
+ *   2. **Project Type** — dropdown populated from `referenceProjectTypes`.
+ *   3. **Phase** — dropdown populated from `referencePhases`.
+ *   4. **Category** — dropdown populated from `categories`.
+ *   5. **Subcategory** — dropdown populated from `subcategories`, cascading
+ *      from the selected category (only shows subcategories belonging to the
+ *      chosen category, or all if no category is selected).
+ *
+ * Cascading behaviour:
+ *   - Selecting a category automatically resets the subcategory to `null`,
+ *     preventing orphaned subcategory selections that don't belong to the
+ *     newly chosen category.
+ *   - The "Clear" button resets every filter field back to its default value.
+ *
+ * State management:
+ *   - Filter state is fully controlled — the parent owns the `FilterState`
+ *     object and passes it via `filters` / `onFiltersChange`. Each dropdown
+ *     uses `"all"` as a sentinel select value (since `<SelectItem>` cannot
+ *     have an empty/null value) and maps it back to `null` in the change
+ *     handler.
+ *
+ * @prop {FilterState}          filters              — Current filter values.
+ * @prop {(f: FilterState) => void} onFiltersChange  — Callback to update filter state.
+ * @prop {LessonCategory[]}     categories           — All available categories.
+ * @prop {LessonSubcategory[]}  subcategories        — All available subcategories.
+ * @prop {ReferenceValue[]}     referenceProjectTypes — Reference data for project type dropdown.
+ * @prop {ReferenceValue[]}     referencePhases       — Reference data for phase dropdown.
+ */
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { X, Search } from "lucide-react";
 import type { LessonCategory, LessonSubcategory, ReferenceValue } from "@shared/schema";
 
+/** Shape of the filter state managed by the parent component. */
 export interface FilterState {
   projectType: string | null;
   phase: string | null;
@@ -29,10 +63,14 @@ export function Filters({
   referenceProjectTypes,
   referencePhases,
 }: FiltersProps) {
+  // Cascading filter: when a category is selected, narrow the subcategory
+  // list to only those that belong to the chosen category.
   const filteredSubcategories = filters.categoryId
     ? subcategories.filter((s) => s.categoryId === parseInt(filters.categoryId!))
     : subcategories;
 
+  // Determine whether any filter is active so we can conditionally show
+  // the "Clear" button.
   const hasActiveFilters =
     filters.projectType !== null ||
     filters.phase !== null ||
@@ -40,6 +78,7 @@ export function Filters({
     filters.subcategoryId !== null ||
     filters.search !== "";
 
+  // Reset every filter field to its default (null / empty string).
   const clearAll = () => {
     onFiltersChange({
       projectType: null,
@@ -110,6 +149,9 @@ export function Filters({
         <label className="text-xs font-medium text-muted-foreground">Category</label>
         <Select
           value={filters.categoryId || "all"}
+          // When the category changes, also reset subcategoryId to null so
+          // the user doesn't keep a stale subcategory that belongs to a
+          // different category.
           onValueChange={(v) =>
             onFiltersChange({
               ...filters,

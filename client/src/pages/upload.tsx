@@ -1,3 +1,32 @@
+/**
+ * @file Upload Page — Excel file upload for bulk lesson import.
+ *
+ * @description
+ * Admin-only page that provides two key workflows:
+ *
+ * 1. **Template download** — Opens `/api/template` in a new tab to download a
+ *    pre-configured Excel template. The template contains dropdown-validated
+ *    columns for project types, phases, categories, and subcategories so that
+ *    users can fill in lessons offline with valid values.
+ *
+ * 2. **File upload & import** — Users drag-and-drop or browse for an .xlsx/.xls
+ *    file. The file is POSTed as multipart/form-data to `/api/upload` (handled
+ *    server-side by multer). On success, the response includes:
+ *    - `lessonsCreated` / `projectsCreated` counts
+ *    - A `success` boolean
+ *    - An `errors` array of per-row validation issues (row number, column, message)
+ *
+ *    After a successful import the component invalidates all relevant query
+ *    caches (lessons, projects, categories, subcategories) so the rest of the
+ *    app reflects the new data immediately.
+ *
+ * 3. **Results display** — Shows a summary card with import counts and, when
+ *    validation errors exist, a scrollable list of row-level issues so the user
+ *    can correct and re-upload.
+ *
+ * Access: Restricted to admin / superadmin / superadministrator roles.
+ * Non-admin users see an "access denied" message.
+ */
 import { useState, useCallback } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -10,12 +39,14 @@ import { useAuth } from "@/hooks/use-auth";
 import { isUnauthorizedError } from "@/lib/auth-utils";
 import { Upload, Download, FileSpreadsheet, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
 
+/** A single row-level validation error returned by the server after processing the uploaded file. */
 interface ValidationError {
   row: number;
   column: string;
   message: string;
 }
 
+/** Server response shape from POST /api/upload after processing an Excel file. */
 interface UploadResult {
   success: boolean;
   lessonsCreated: number;
@@ -26,11 +57,14 @@ interface UploadResult {
 export default function UploadPage() {
   const { user } = useAuth();
   const [file, setFile] = useState<File | null>(null);
+  /** Controls the visual highlight of the drop zone when a file is dragged over it. */
   const [dragActive, setDragActive] = useState(false);
+  /** Stores the server response after a successful or partially-successful upload. */
   const [result, setResult] = useState<UploadResult | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
+  // --- Access gate: only admin-level roles can see this page ---
   const userRole = user?.role?.toLowerCase().trim();
   if (userRole !== "admin" && userRole !== "superadmin" && userRole !== "superadministrator") {
     return (
@@ -40,6 +74,16 @@ export default function UploadPage() {
     );
   }
 
+  /**
+   * Upload mutation: wraps the file in FormData and POSTs to /api/upload.
+   * The server (multer middleware) parses the multipart body, validates each
+   * row, and returns an UploadResult with counts and any validation errors.
+   *
+   * On success, all related query caches are invalidated so the dashboard,
+   * projects page, and filter dropdowns reflect the newly imported data.
+   *
+   * On 401 errors, the user is redirected to the login flow after a short delay.
+   */
   const uploadMutation = useMutation({
     mutationFn: async (file: File) => {
       const formData = new FormData();
@@ -58,6 +102,7 @@ export default function UploadPage() {
     onSuccess: (data) => {
       setResult(data);
       if (data.success) {
+        // Invalidate all data caches so the app reflects the newly imported lessons
         queryClient.invalidateQueries({ queryKey: ["/api/lessons"] });
         queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
         queryClient.invalidateQueries({ queryKey: ["/api/categories"] });
@@ -66,6 +111,7 @@ export default function UploadPage() {
       }
     },
     onError: (error: Error) => {
+      // Handle expired session by redirecting to the login endpoint
       if (isUnauthorizedError(error)) {
         toast({ title: "Unauthorized", description: "Logging in again...", variant: "destructive" });
         setTimeout(() => { window.location.href = "/api/login"; }, 500);
@@ -75,6 +121,10 @@ export default function UploadPage() {
     },
   });
 
+  /**
+   * Drag-and-drop handler: validates that the dropped file has an Excel extension
+   * before accepting it. Clears any previous upload result when a new file is selected.
+   */
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setDragActive(false);
@@ -87,6 +137,7 @@ export default function UploadPage() {
     }
   }, [toast]);
 
+  /** File browser handler: accepts the first file from the native file picker dialog. */
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (f) {
@@ -95,10 +146,12 @@ export default function UploadPage() {
     }
   }, []);
 
+  /** Triggers the upload mutation with the currently selected file. */
   const handleUpload = () => {
     if (file) uploadMutation.mutate(file);
   };
 
+  /** Opens the server-generated Excel template in a new tab for download. */
   const downloadTemplate = () => {
     window.open("/api/template", "_blank");
   };

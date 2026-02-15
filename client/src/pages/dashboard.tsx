@@ -1,3 +1,33 @@
+/**
+ * @file Dashboard Page — Main lessons-learned analytics dashboard.
+ *
+ * @description
+ * Provides a two-tab view ("Could Be Better" / "Went Well" / "All Lessons") of
+ * lessons grouped by subcategory.  Each subcategory card displays a risk score
+ * that decays daily (configurable via ScoringConfig), a visual score bar, and
+ * an expandable list of individual lessons.
+ *
+ * Key features:
+ * - **Tab switching** — Three mutually-exclusive tabs filter lessons by their
+ *   `type` field ("CouldHaveGoneBetter" | "WentWell" | all).
+ * - **Multi-dimension filtering** — Project type, phase, category, subcategory,
+ *   and free-text search; managed via the `FilterState` object.
+ * - **Subcategory grouping with risk scoring** — Lessons are grouped by
+ *   subcategory. Each group's effective score is computed as:
+ *     `max(0, currentScore - daysSinceLastUpdate * dailyDecrement)`
+ *   Groups are sorted descending by effective score so the highest-risk
+ *   subcategories surface first.
+ * - **Collapsible groups** — Each subcategory card can be expanded to reveal
+ *   its lessons, sorted newest-first.
+ * - **Full Lesson List dialog** — A modal that shows every lesson matching the
+ *   current filters/tab in a scrollable, detailed card layout.
+ * - **Excel export** — Downloads the currently filtered lesson set as an .xlsx
+ *   file via the server-side `/api/lessons/export` endpoint.
+ *
+ * Access: Available to all authenticated users (read-only view).
+ * Admin users see the same data; admin-only mutations are handled in the
+ * LessonDetailDialog component.
+ */
 import { useState, useMemo, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
@@ -14,6 +44,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import type { Lesson, Project, LessonCategory, LessonSubcategory, ReferenceValue, ImpactLevel, ScoringConfig } from "@shared/schema";
 
+/** Lesson record enriched with its related project, category, subcategory, and impact level. */
 interface LessonWithRelations extends Lesson {
   project?: Project;
   category?: LessonCategory;
@@ -21,13 +52,16 @@ interface LessonWithRelations extends Lesson {
   impact?: ImpactLevel;
 }
 
+/** Represents a group of lessons sharing the same subcategory, along with its computed effective score. */
 interface SubcategoryGroup {
   subcategory: LessonSubcategory;
   category: LessonCategory;
   lessons: LessonWithRelations[];
+  /** Score after applying daily decay: max(0, currentScore - daysSince * dailyDecrement) */
   effectiveScore: number;
 }
 
+/** Shape of the /api/reference-data response used to populate filter dropdowns. */
 interface ReferenceData {
   projectTypes: ReferenceValue[];
   projectPhases: ReferenceValue[];
@@ -35,8 +69,14 @@ interface ReferenceData {
   subcategories: LessonSubcategory[];
 }
 
+/** Tab identifiers for the three lesson-type views. */
 type TabType = "could-be-better" | "went-well" | "all";
 
+/**
+ * Maps an effective score to a Tailwind text-color class.
+ * Higher scores get a more prominent (intense) color to signal urgency.
+ * Score thresholds: 750+ (full), 500+ (80%), 250+ (60%), below (muted).
+ */
 function getScoreColor(score: number) {
   if (score >= 750) return "text-cbb";
   if (score >= 500) return "text-cbb/80";
@@ -44,10 +84,16 @@ function getScoreColor(score: number) {
   return "text-muted-foreground";
 }
 
+/**
+ * Converts a score to a percentage width for the horizontal score bar.
+ * The bar is clamped between 3% (minimum visible sliver) and 100%.
+ * A score of 1500 fills the bar completely — this acts as the visual ceiling.
+ */
 function getScoreBarWidth(score: number) {
   return Math.min(100, Math.max(3, (score / 1500) * 100));
 }
 
+/** Returns a Tailwind background-color class for the score bar, using the same thresholds as getScoreColor. */
 function getScoreBarColor(score: number) {
   if (score >= 750) return "bg-cbb";
   if (score >= 500) return "bg-cbb/70";
@@ -55,6 +101,11 @@ function getScoreBarColor(score: number) {
   return "bg-cbb/30";
 }
 
+/**
+ * Builds an array of human-readable label/value pairs summarising the current
+ * filter state and active tab. Used in the Full Lesson List dialog to show
+ * which filters are applied as Badge pills.
+ */
 function buildFilterSummary(filters: FilterState, activeTab: TabType, categories: LessonCategory[], subcategories: LessonSubcategory[]) {
   const parts: { label: string; value: string }[] = [];
   const tabLabel = activeTab === "could-be-better" ? "Could Be Better" : activeTab === "went-well" ? "Went Well" : "All Lessons";
@@ -73,6 +124,7 @@ function buildFilterSummary(filters: FilterState, activeTab: TabType, categories
   return parts;
 }
 
+/** Returns true if any filter dimension has been set (used to decide whether to show "No filters applied" text). */
 function hasActiveFilters(filters: FilterState) {
   return filters.projectType !== null || filters.phase !== null || filters.categoryId !== null || filters.subcategoryId !== null || filters.search !== "";
 }
@@ -80,8 +132,12 @@ function hasActiveFilters(filters: FilterState) {
 export default function Dashboard() {
   const { user } = useAuth();
   const { toast } = useToast();
+
+  // Normalise the role string for case-insensitive comparison
   const userRole = (user?.role as string || "").toLowerCase().trim();
   const isAdminUser = userRole === "admin" || userRole === "superadmin" || userRole === "superadministrator";
+
+  // --- State: active tab, filter selections, UI toggles ---
   const [activeTab, setActiveTab] = useState<TabType>("could-be-better");
   const [filters, setFilters] = useState<FilterState>({
     projectType: null,
@@ -91,10 +147,12 @@ export default function Dashboard() {
     search: "",
   });
   const [selectedLesson, setSelectedLesson] = useState<LessonWithRelations | null>(null);
+  /** Tracks which subcategory groups are currently expanded (by subcategory ID). */
   const [expandedSubcategories, setExpandedSubcategories] = useState<Set<number>>(new Set());
   const [showFullList, setShowFullList] = useState(false);
   const [downloading, setDownloading] = useState(false);
 
+  // --- Data queries: all fetched upfront; default queryFn handles the fetch ---
   const { data: lessons = [], isLoading: lessonsLoading } = useQuery<LessonWithRelations[]>({
     queryKey: ["/api/lessons"],
   });
@@ -111,23 +169,34 @@ export default function Dashboard() {
     queryKey: ["/api/projects"],
   });
 
+  // Scoring config drives the daily decay rate applied to subcategory scores
   const { data: scoringConfigData } = useQuery<ScoringConfig>({
     queryKey: ["/api/scoring-config"],
   });
+  /** Points subtracted per day since the subcategory score was last updated. Falls back to 1 if config unavailable. */
   const dailyDecrement = scoringConfigData?.dailyDecrement ?? 1;
 
   const { data: refData } = useQuery<ReferenceData>({
     queryKey: ["/api/reference-data"],
   });
 
+  /**
+   * Client-side multi-dimension filter pipeline.
+   * Each active filter dimension is checked in sequence; a lesson must pass all
+   * active filters. The project type filter resolves the project from the
+   * lesson's embedded relation or falls back to the projects array.
+   * Free-text search matches against name, event description, and key learning.
+   */
   const filteredLessons = useMemo(() => {
     return lessons.filter((lesson) => {
       if (filters.projectType) {
+        // Resolve project either from the pre-joined relation or the local cache
         const project = lesson.project || projects.find((p) => p.id === lesson.projectId);
         if (!project || project.projectType !== filters.projectType) return false;
       }
       if (filters.phase && lesson.phase !== filters.phase) return false;
       if (filters.categoryId) {
+        // Category filter operates through the subcategory's parent categoryId
         const sub = lesson.subcategory || subcategories.find((s) => s.id === lesson.subcategoryId);
         if (!sub || sub.categoryId !== parseInt(filters.categoryId)) return false;
       }
@@ -145,6 +214,22 @@ export default function Dashboard() {
     });
   }, [lessons, filters, projects, subcategories]);
 
+  /**
+   * Subcategory grouping & scoring algorithm.
+   *
+   * For each lesson type (CBB, WW, All), this memo:
+   * 1. Filters the already-filtered lessons by type.
+   * 2. Groups them by subcategory ID into a Map.
+   * 3. For each new subcategory group, computes the **effective score**:
+   *      effectiveScore = max(0, currentScore - daysSince * dailyDecrement)
+   *    where `daysSince` is the number of full days since `lastScoreUpdatedAt`.
+   *    This daily decay means inactive subcategories gradually lose urgency.
+   * 4. Enriches each lesson with its project/category/subcategory relations.
+   * 5. Sorts groups descending by effective score so the most critical
+   *    subcategories appear at the top of the dashboard.
+   *
+   * The result is cached for all three tabs so switching tabs is instant.
+   */
   const buildGroups = useMemo(() => {
     const buildForType = (type: "CouldHaveGoneBetter" | "WentWell" | "All"): SubcategoryGroup[] => {
       const typedLessons = type === "All"
@@ -153,11 +238,13 @@ export default function Dashboard() {
       const groups: Map<number, SubcategoryGroup> = new Map();
 
       typedLessons.forEach((lesson) => {
+        // Resolve subcategory and category from the lesson's embedded relation or local cache
         const sub = lesson.subcategory || subcategories.find((s) => s.id === lesson.subcategoryId);
         const cat = sub ? (lesson.category || categories.find((c) => c.id === sub.categoryId)) : undefined;
         if (!sub || !cat) return;
 
         if (!groups.has(sub.id)) {
+          // Compute the time-decayed effective score for this subcategory
           const now = new Date();
           const lastUpdate = sub.lastScoreUpdatedAt ? new Date(sub.lastScoreUpdatedAt) : now;
           const daysSince = Math.floor((now.getTime() - lastUpdate.getTime()) / (1000 * 60 * 60 * 24));
@@ -170,10 +257,12 @@ export default function Dashboard() {
             effectiveScore,
           });
         }
+        // Enrich the lesson with resolved relations for display
         const enriched = { ...lesson, project: projects.find((p) => p.id === lesson.projectId), category: cat, subcategory: sub };
         groups.get(sub.id)!.lessons.push(enriched);
       });
 
+      // Sort by descending effective score — highest-risk subcategories first
       return Array.from(groups.values()).sort((a, b) => b.effectiveScore - a.effectiveScore);
     };
 
@@ -184,6 +273,7 @@ export default function Dashboard() {
     };
   }, [filteredLessons, subcategories, categories, projects, dailyDecrement]);
 
+  /** Toggles the expanded/collapsed state of a subcategory card using immutable Set update. */
   const toggleSubcategory = (subId: number) => {
     setExpandedSubcategories((prev) => {
       const next = new Set(prev);
@@ -192,6 +282,11 @@ export default function Dashboard() {
     });
   };
 
+  /**
+   * Serialises the current tab + filter state into URL search params.
+   * These are sent to the server-side export endpoint so the downloaded
+   * Excel file matches exactly what the user sees on screen.
+   */
   const buildExportParams = useCallback(() => {
     const params = new URLSearchParams();
     params.set("tab", activeTab);
@@ -203,6 +298,12 @@ export default function Dashboard() {
     return params.toString();
   }, [activeTab, filters]);
 
+  /**
+   * Triggers an Excel download via the export API.
+   * Uses the "hidden anchor" pattern: creates a temporary <a> element pointing
+   * at a blob URL, clicks it to start the download, then cleans up the DOM
+   * node and revokes the object URL to free memory.
+   */
   const handleDownloadExcel = useCallback(async () => {
     setDownloading(true);
     try {
@@ -225,6 +326,7 @@ export default function Dashboard() {
     }
   }, [buildExportParams, toast]);
 
+  // Unfiltered counts shown in the tab badges (always reflect the full dataset)
   const couldBeBetterCount = lessons.filter((l) => l.type === "CouldHaveGoneBetter").length;
   const wentWellCount = lessons.filter((l) => l.type === "WentWell").length;
   const allCount = lessons.length;
@@ -243,6 +345,7 @@ export default function Dashboard() {
     );
   }
 
+  // Derive the active tab flags and select the pre-computed group set for the current tab
   const isCBB = activeTab === "could-be-better";
   const isWW = activeTab === "went-well";
   const isAll = activeTab === "all";
@@ -252,6 +355,7 @@ export default function Dashboard() {
       ? buildGroups.wentWell
       : buildGroups.all;
 
+  // Score bars are always visible; `showScores` kept as a toggle point if a future feature flag is added
   const showScores = true;
   const totalFilteredLessons = activeGroups.reduce((sum, g) => sum + g.lessons.length, 0);
   const filterSummary = buildFilterSummary(filters, activeTab, categories, subcategories);

@@ -1,3 +1,42 @@
+/**
+ * @file scoring-rates.tsx — Scoring Rates Configuration Page
+ *
+ * @description
+ * Admin-only page for configuring the scoring engine and managing impact levels.
+ *
+ * The page has two main sections:
+ *
+ * 1. **Scoring Parameters** (ScoringConfigSection):
+ *    Three numeric fields — Initial Score, Increment Score, and Daily Decrement.
+ *    - Initial Score: points assigned when a subcategory first receives a lesson.
+ *    - Increment Score: additional points for each subsequent lesson.
+ *    - Daily Decrement: points subtracted per day of inactivity (aging).
+ *    - "Save & Recalculate" persists values and triggers a server-side
+ *      recalculation of all existing subcategory scores.
+ *    - "Reset to Defaults" restores factory-default scoring parameters
+ *      and also triggers a full recalculation.
+ *
+ * 2. **Impact Levels** (ImpactLevelsSection):
+ *    Ordered list of impact-level entries, each with a description and a
+ *    weighting percentage (minimum 100%). The weighting acts as a multiplier
+ *    on both initial and increment scores (e.g. 150% = 1.5x).
+ *    - Inline editing of description and weighting (weighting is locked if
+ *      the impact level is already assigned to lessons).
+ *    - Dependency-aware deletion: entries with usage > 0 show a Lock icon.
+ *    - New entries are appended with sortOrder = current length + 1.
+ *
+ * Access: restricted to "admin", "superadmin", or "superadministrator" roles.
+ *
+ * Data flow:
+ * - GET    /api/scoring-config       → ScoringConfig
+ * - PATCH  /api/scoring-config       → update & recalculate
+ * - POST   /api/scoring-config/reset → reset to defaults & recalculate
+ * - GET    /api/impact-levels        → ImpactLevel[]
+ * - POST   /api/impact-levels        → create new impact level
+ * - PATCH  /api/impact-levels/:id    → update description/weighting
+ * - DELETE /api/impact-levels/:id    → delete unused impact level
+ * - GET    /api/reference-data/usage → usage counts (ImpactLevel key)
+ */
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -13,6 +52,11 @@ import { useAuth } from "@/hooks/use-auth";
 import { Gauge, Plus, X, Loader2, Pencil, Check, Lock, RotateCcw, Save, Info } from "lucide-react";
 import type { ImpactLevel, ScoringConfig } from "@shared/schema";
 
+/**
+ * ImpactLevelsSection — CRUD list for impact levels with inline editing,
+ * dependency-aware deletion, and weighting percentage management.
+ * Receives usage counts from the parent to determine deletability.
+ */
 function ImpactLevelsSection({ usage }: { usage: Record<number, number> }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -22,10 +66,12 @@ function ImpactLevelsSection({ usage }: { usage: Record<number, number> }) {
   const [editDesc, setEditDesc] = useState("");
   const [editWeight, setEditWeight] = useState("");
 
+  // Fetch all impact levels sorted by sortOrder
   const { data: impacts = [], isLoading } = useQuery<ImpactLevel[]>({
     queryKey: ["/api/impact-levels"],
   });
 
+  // Mutation: create a new impact level with auto-assigned sortOrder
   const createMutation = useMutation({
     mutationFn: async (data: { description: string; weightingPercent: number; sortOrder: number }) => {
       const res = await apiRequest("POST", "/api/impact-levels", data);
@@ -43,6 +89,7 @@ function ImpactLevelsSection({ usage }: { usage: Record<number, number> }) {
     },
   });
 
+  // Mutation: update description and/or weighting; weighting input is disabled for in-use levels
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: number; data: { description?: string; weightingPercent?: number } }) => {
       const res = await apiRequest("PATCH", `/api/impact-levels/${id}`, data);
@@ -58,6 +105,7 @@ function ImpactLevelsSection({ usage }: { usage: Record<number, number> }) {
     },
   });
 
+  // Mutation: delete an unused impact level (server rejects if in use)
   const deleteMutation = useMutation({
     mutationFn: async (id: number) => {
       const res = await apiRequest("DELETE", `/api/impact-levels/${id}`);
@@ -73,9 +121,11 @@ function ImpactLevelsSection({ usage }: { usage: Record<number, number> }) {
     },
   });
 
+  /** Validate inputs and create a new impact level; sortOrder auto-increments */
   const handleAdd = () => {
     if (!newDescription.trim()) return;
     const w = parseInt(newWeighting);
+    // Weighting must be at least 100% (1x multiplier)
     if (isNaN(w) || w < 100) return;
     createMutation.mutate({
       description: newDescription.trim(),
@@ -90,6 +140,7 @@ function ImpactLevelsSection({ usage }: { usage: Record<number, number> }) {
     setEditWeight(String(impact.weightingPercent));
   };
 
+  /** Persist inline edits; weighting minimum is 100% */
   const saveEdit = () => {
     if (!editingId) return;
     const w = parseInt(editWeight);
@@ -254,6 +305,12 @@ function ImpactLevelsSection({ usage }: { usage: Record<number, number> }) {
   );
 }
 
+/**
+ * ScoringConfigSection — form for the three scoring parameters.
+ * Local state mirrors server data; `hasEdited` tracks unsaved changes
+ * to control the Save button's disabled state. On first data load
+ * (or after save/reset), fields are populated from the server response.
+ */
 function ScoringConfigSection() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -262,11 +319,14 @@ function ScoringConfigSection() {
     queryKey: ["/api/scoring-config"],
   });
 
+  // Local form state — stored as strings to support empty-field UX
   const [initialScore, setInitialScore] = useState<string>("");
   const [incrementScore, setIncrementScore] = useState<string>("");
   const [dailyDecrement, setDailyDecrement] = useState<string>("");
+  // Tracks whether the user has modified any field since last load/save
   const [hasEdited, setHasEdited] = useState(false);
 
+  /** Sync local form state from a ScoringConfig object and reset the dirty flag */
   const populateFields = (cfg: ScoringConfig) => {
     setInitialScore(String(cfg.initialScore));
     setIncrementScore(String(cfg.incrementScore));
@@ -274,10 +334,13 @@ function ScoringConfigSection() {
     setHasEdited(false);
   };
 
+  // One-time initialization: populate form fields when server data arrives
+  // and the user hasn't started editing yet
   if (config && !hasEdited && initialScore === "") {
     populateFields(config);
   }
 
+  // Mutation: persist scoring parameters and trigger server-side recalculation
   const updateMutation = useMutation({
     mutationFn: async (data: { initialScore: number; incrementScore: number; dailyDecrement: number }) => {
       const res = await apiRequest("PATCH", "/api/scoring-config", data);
@@ -295,6 +358,7 @@ function ScoringConfigSection() {
     },
   });
 
+  // Mutation: restore factory defaults and trigger server-side recalculation
   const resetMutation = useMutation({
     mutationFn: async () => {
       const res = await apiRequest("POST", "/api/scoring-config/reset");
@@ -312,6 +376,7 @@ function ScoringConfigSection() {
     },
   });
 
+  /** Validate all three fields are non-negative integers before submitting */
   const handleSave = () => {
     const i = parseInt(initialScore);
     const inc = parseInt(incrementScore);
@@ -327,6 +392,7 @@ function ScoringConfigSection() {
     updateMutation.mutate({ initialScore: i, incrementScore: inc, dailyDecrement: d });
   };
 
+  /** Curried change handler that also marks the form as dirty */
   const handleChange = (setter: (v: string) => void) => (e: React.ChangeEvent<HTMLInputElement>) => {
     setter(e.target.value);
     setHasEdited(true);
@@ -402,12 +468,19 @@ function ScoringConfigSection() {
   );
 }
 
+/**
+ * ScoringRatesPage — top-level page component.
+ * Renders ScoringConfigSection and ImpactLevelsSection in separate Cards.
+ * Fetches usage data once and passes the ImpactLevel slice to the child.
+ */
 export default function ScoringRatesPage() {
   const { user } = useAuth();
 
+  // Role-based access gate
   const currentUserRole = user?.role as string;
   const isCurrentAdmin = currentUserRole === "admin" || currentUserRole === "superadmin" || currentUserRole === "superadministrator";
 
+  // Usage counts shared with ImpactLevelsSection for dependency checking
   const { data: usageData } = useQuery<Record<string, Record<number, number>>>({
     queryKey: ["/api/reference-data/usage"],
   });
