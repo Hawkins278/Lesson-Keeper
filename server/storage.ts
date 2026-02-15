@@ -6,7 +6,9 @@ import {
   type ReferenceValue, type InsertReferenceValue,
   type ImpactLevel, type InsertImpactLevel,
   type User, type UserRole,
+  type ScoringConfig,
   projects, lessonCategories, lessonSubcategories, lessons, referenceValues, impactLevels, users,
+  scoringConfig, SCORING_DEFAULTS,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, sql, ne, or, inArray } from "drizzle-orm";
@@ -67,6 +69,10 @@ export interface IStorage {
   deleteUserByEmail(email: string): Promise<void>;
   deleteUser(userId: string): Promise<void>;
   updateUserProfile(userId: string, data: { firstName?: string; lastName?: string; profileImageUrl?: string }): Promise<User | undefined>;
+
+  getScoringConfig(): Promise<ScoringConfig>;
+  updateScoringConfig(data: { initialScore: number; incrementScore: number; dailyDecrement: number }): Promise<ScoringConfig>;
+  recalculateAllScores(config: { initialScore: number; incrementScore: number; dailyDecrement: number }): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -393,6 +399,80 @@ export class DatabaseStorage implements IStorage {
     if (data.profileImageUrl !== undefined) updateData.profileImageUrl = data.profileImageUrl;
     const [updated] = await db.update(users).set(updateData).where(eq(users.id, userId)).returning();
     return updated;
+  }
+
+  async getScoringConfig(): Promise<ScoringConfig> {
+    const rows = await db.select().from(scoringConfig);
+    if (rows.length > 0) return rows[0];
+    const [created] = await db.insert(scoringConfig).values({
+      initialScore: SCORING_DEFAULTS.initialScore,
+      incrementScore: SCORING_DEFAULTS.incrementScore,
+      dailyDecrement: SCORING_DEFAULTS.dailyDecrement,
+    }).returning();
+    return created;
+  }
+
+  async updateScoringConfig(data: { initialScore: number; incrementScore: number; dailyDecrement: number }): Promise<ScoringConfig> {
+    const existing = await this.getScoringConfig();
+    const [updated] = await db.update(scoringConfig).set({
+      initialScore: data.initialScore,
+      incrementScore: data.incrementScore,
+      dailyDecrement: data.dailyDecrement,
+      updatedAt: new Date(),
+    }).where(eq(scoringConfig.id, existing.id)).returning();
+    return updated;
+  }
+
+  async recalculateAllScores(config: { initialScore: number; incrementScore: number; dailyDecrement: number }): Promise<void> {
+    const allSubcategories = await db.select().from(lessonSubcategories);
+    const allLessons = await db.select().from(lessons);
+    const allImpacts = await db.select().from(impactLevels);
+    const impactMap = new Map(allImpacts.map(i => [i.id, i.weightingPercent]));
+
+    for (const sub of allSubcategories) {
+      const subLessons = allLessons
+        .filter(l => l.subcategoryId === sub.id)
+        .sort((a, b) => new Date(a.createdAt!).getTime() - new Date(b.createdAt!).getTime());
+
+      if (subLessons.length === 0) {
+        await db.update(lessonSubcategories).set({
+          currentScore: 0,
+          lastScoreUpdatedAt: null,
+          firstRecordedDate: null,
+        }).where(eq(lessonSubcategories.id, sub.id));
+        continue;
+      }
+
+      const firstDate = new Date(subLessons[0].createdAt!);
+      let score = 0;
+      let lastUpdate = firstDate;
+
+      for (let i = 0; i < subLessons.length; i++) {
+        const lesson = subLessons[i];
+        const lessonDate = new Date(lesson.createdAt!);
+        const weightingPercent = lesson.impactId ? (impactMap.get(lesson.impactId) || 100) : 100;
+        const weightingMultiplier = weightingPercent / 100;
+
+        if (i === 0) {
+          score = Math.round(config.initialScore * weightingMultiplier);
+        } else {
+          const daysSince = Math.max(0, Math.floor((lessonDate.getTime() - lastUpdate.getTime()) / (1000 * 60 * 60 * 24)));
+          score = Math.max(0, score - daysSince * config.dailyDecrement);
+          score += Math.round(config.incrementScore * weightingMultiplier);
+        }
+        lastUpdate = lessonDate;
+      }
+
+      const now = new Date();
+      const daysSinceLastLesson = Math.max(0, Math.floor((now.getTime() - lastUpdate.getTime()) / (1000 * 60 * 60 * 24)));
+      score = Math.max(0, score - daysSinceLastLesson * config.dailyDecrement);
+
+      await db.update(lessonSubcategories).set({
+        currentScore: score,
+        lastScoreUpdatedAt: now,
+        firstRecordedDate: firstDate,
+      }).where(eq(lessonSubcategories.id, sub.id));
+    }
   }
 }
 

@@ -9,7 +9,7 @@ import { ChevronDown, ChevronRight, AlertTriangle, CheckCircle2, TrendingDown, L
 import { Filters, type FilterState } from "@/components/filters";
 import { LessonDetailDialog } from "@/components/lesson-detail-dialog";
 import { useAuth } from "@/hooks/use-auth";
-import type { Lesson, Project, LessonCategory, LessonSubcategory, ReferenceValue, ImpactLevel } from "@shared/schema";
+import type { Lesson, Project, LessonCategory, LessonSubcategory, ReferenceValue, ImpactLevel, ScoringConfig } from "@shared/schema";
 
 interface LessonWithRelations extends Lesson {
   project?: Project;
@@ -83,6 +83,11 @@ export default function Dashboard() {
     queryKey: ["/api/projects"],
   });
 
+  const { data: scoringConfigData } = useQuery<ScoringConfig>({
+    queryKey: ["/api/scoring-config"],
+  });
+  const dailyDecrement = scoringConfigData?.dailyDecrement ?? 1;
+
   const { data: refData } = useQuery<ReferenceData>({
     queryKey: ["/api/reference-data"],
   });
@@ -128,7 +133,7 @@ export default function Dashboard() {
           const now = new Date();
           const lastUpdate = sub.lastScoreUpdatedAt ? new Date(sub.lastScoreUpdatedAt) : now;
           const daysSince = Math.floor((now.getTime() - lastUpdate.getTime()) / (1000 * 60 * 60 * 24));
-          const effectiveScore = Math.round(Math.max(0, (sub.currentScore || 0) - daysSince));
+          const effectiveScore = Math.round(Math.max(0, (sub.currentScore || 0) - daysSince * dailyDecrement));
 
           groups.set(sub.id, {
             subcategory: sub,
@@ -149,7 +154,7 @@ export default function Dashboard() {
       wentWell: buildForType("WentWell"),
       all: buildForType("All"),
     };
-  }, [filteredLessons, subcategories, categories, projects]);
+  }, [filteredLessons, subcategories, categories, projects, dailyDecrement]);
 
   const toggleSubcategory = (subId: number) => {
     setExpandedSubcategories((prev) => {

@@ -766,6 +766,7 @@ export async function registerRoutes(
       let lessonsCreated = 0;
       let projectsCreated = 0;
       const userId = req.user?.claims?.sub;
+      const scoringCfg = await storage.getScoringConfig();
 
       let project = await storage.findProjectByNameAndType(projectName, projectType);
       if (!project) {
@@ -802,13 +803,13 @@ export async function registerRoutes(
           const now = new Date();
           if (!subcategory.firstRecordedDate) {
             await storage.createSubcategoryFirstRecorded(subcategory.id, now);
-            const initialScore = Math.round(500 * weightingMultiplier);
+            const initialScore = Math.round(scoringCfg.initialScore * weightingMultiplier);
             await storage.updateSubcategoryScore(subcategory.id, initialScore, now);
           } else {
             const lastUpdate = subcategory.lastScoreUpdatedAt ? new Date(subcategory.lastScoreUpdatedAt) : now;
             const daysSince = Math.max(0, Math.floor((now.getTime() - lastUpdate.getTime()) / (1000 * 60 * 60 * 24)));
-            const decayed = Math.max(0, (subcategory.currentScore || 0) - daysSince);
-            const increment = Math.round(250 * weightingMultiplier);
+            const decayed = Math.max(0, (subcategory.currentScore || 0) - daysSince * scoringCfg.dailyDecrement);
+            const increment = Math.round(scoringCfg.incrementScore * weightingMultiplier);
             const newScore = decayed + increment;
             await storage.updateSubcategoryScore(subcategory.id, newScore, now);
           }
@@ -833,6 +834,54 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Upload error:", error);
       res.status(500).json({ message: "Failed to process upload" });
+    }
+  });
+
+  app.get("/api/scoring-config", isAuthenticated, async (_req, res) => {
+    try {
+      const config = await storage.getScoringConfig();
+      res.json(config);
+    } catch (error) {
+      console.error("Error fetching scoring config:", error);
+      res.status(500).json({ message: "Failed to fetch scoring config" });
+    }
+  });
+
+  app.patch("/api/scoring-config", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const { initialScore, incrementScore, dailyDecrement } = req.body;
+      if (typeof initialScore !== "number" || typeof incrementScore !== "number" || typeof dailyDecrement !== "number") {
+        return res.status(400).json({ message: "All scoring values must be numbers" });
+      }
+      if (initialScore < 0 || incrementScore < 0 || dailyDecrement < 0) {
+        return res.status(400).json({ message: "Scoring values must be non-negative" });
+      }
+      const updated = await storage.updateScoringConfig({ initialScore, incrementScore, dailyDecrement });
+      await storage.recalculateAllScores({ initialScore, incrementScore, dailyDecrement });
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating scoring config:", error);
+      res.status(500).json({ message: "Failed to update scoring config" });
+    }
+  });
+
+  app.post("/api/scoring-config/reset", isAuthenticated, isAdmin, async (_req, res) => {
+    try {
+      const { SCORING_DEFAULTS } = await import("@shared/schema");
+      const updated = await storage.updateScoringConfig({
+        initialScore: SCORING_DEFAULTS.initialScore,
+        incrementScore: SCORING_DEFAULTS.incrementScore,
+        dailyDecrement: SCORING_DEFAULTS.dailyDecrement,
+      });
+      await storage.recalculateAllScores({
+        initialScore: SCORING_DEFAULTS.initialScore,
+        incrementScore: SCORING_DEFAULTS.incrementScore,
+        dailyDecrement: SCORING_DEFAULTS.dailyDecrement,
+      });
+      res.json(updated);
+    } catch (error) {
+      console.error("Error resetting scoring config:", error);
+      res.status(500).json({ message: "Failed to reset scoring config" });
     }
   });
 

@@ -15,9 +15,10 @@ A full-stack web application for capturing, organizing, and learning from projec
 - Filtering by project type, phase, category, subcategory, and text search
 - Collapsible category/subcategory groupings
 - Lesson detail drill-down dialog
-- Scoring system: subcategories start at 500 when first "Could Be Better" lesson is recorded, decay by 1 point per day, boost by 250 for each new issue
+- Configurable scoring system with admin-managed parameters (initial score, increment, daily decrement) and impact-weighted multipliers
 - Role-based access control: User and Admin
-- Reference Data page for managing reference data and impact levels
+- Reference Data page for managing reference data
+- Scoring Rates page for configuring scoring parameters and impact level weightings
 - User Administration page for managing admin accounts and user access
 
 ## Role System
@@ -33,7 +34,7 @@ server/storage.ts         - Data access layer (IStorage interface)
 server/routes.ts          - Express API routes (includes admin middleware)
 server/seed.ts            - Seed data for demo
 client/src/App.tsx         - Main app with auth routing and footer
-client/src/pages/          - Landing, Dashboard, Upload, Projects, Reference Data (admin.tsx), User Admin pages
+client/src/pages/          - Landing, Dashboard, Upload, Projects, Reference Data (admin.tsx), Scoring Rates, User Admin, Settings pages
 client/src/components/     - Sidebar, Filters, LessonDetailDialog, ThemeToggle
 ```
 
@@ -44,12 +45,16 @@ client/src/components/     - Sidebar, Filters, LessonDetailDialog, ThemeToggle
 - **LessonSubcategories**: name, categoryId, currentScore, lastScoreUpdatedAt, firstRecordedDate
 - **Lessons**: projectId, subcategoryId, phase, type (WentWell/CouldHaveGoneBetter), name, eventDescription, keyLearningOrAction
 - **ReferenceValues**: type (ProjectType|ProjectPhase), value — stores configurable dropdown values for template generation
+- **ScoringConfig**: initialScore, incrementScore, dailyDecrement — configurable scoring parameters
 
 ## Admin API Endpoints
 - GET /api/admin/users — list admins (requires admin)
 - POST /api/admin/add — add admin by email (requires admin)
 - DELETE /api/admin/remove/:userId — remove admin (requires admin, min 2 enforced)
 - POST/DELETE /api/reference-data/:type — manage reference data (requires admin)
+- GET /api/scoring-config — get scoring parameters (authenticated)
+- PATCH /api/scoring-config — update scoring parameters and recalculate all scores (admin)
+- POST /api/scoring-config/reset — reset to defaults and recalculate (admin)
 
 ## Excel Template Format
 - **Sheet 1 "Lessons Template"**: Structured layout with styled section headers (dark blue) and column headers (light blue)
@@ -61,6 +66,11 @@ client/src/components/     - Sidebar, Filters, LessonDetailDialog, ThemeToggle
 - Template generation uses `exceljs` library for styling; upload parsing uses `xlsx` (SheetJS)
 
 ## Recent Changes
+- 2026-02-15: Added Scoring Rates page (/scoring-rates) with configurable scoring parameters and impact level management
+- 2026-02-15: Created scoring_config table with initialScore (500), incrementScore (250), dailyDecrement (1) defaults
+- 2026-02-15: Moved Impact Levels from Reference Data page to Scoring Rates page
+- 2026-02-15: Dashboard and upload use dynamic scoring config from database instead of hardcoded values
+- 2026-02-15: Added recalculateAllScores functionality for retroactive score recalculation with zero-floor rule
 - 2026-02-14: Added User Settings page (/settings) with avatar upload via object storage and profile editing (first/last name)
 - 2026-02-14: Integrated object storage for user avatar file uploads with presigned URL flow
 - 2026-02-14: Added GET/PATCH /api/user/profile endpoints for user profile management

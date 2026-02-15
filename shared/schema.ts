@@ -79,6 +79,22 @@ export const impactLevels = pgTable("impact_levels", {
   sortOrder: integer("sort_order").notNull().default(0),
 });
 
+export const scoringConfig = pgTable("scoring_config", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  initialScore: integer("initial_score").notNull().default(500),
+  incrementScore: integer("increment_score").notNull().default(250),
+  dailyDecrement: integer("daily_decrement").notNull().default(1),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export type ScoringConfig = typeof scoringConfig.$inferSelect;
+
+export const SCORING_DEFAULTS = {
+  initialScore: 500,
+  incrementScore: 250,
+  dailyDecrement: 1,
+} as const;
+
 export const insertReferenceValueSchema = createInsertSchema(referenceValues).omit({ id: true });
 export type InsertReferenceValue = z.infer<typeof insertReferenceValueSchema>;
 export type ReferenceValue = typeof referenceValues.$inferSelect;
