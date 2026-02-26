@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -7,11 +7,14 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
-import { ChevronDown, ChevronRight, AlertTriangle, CheckCircle2, TrendingDown, List, FileSpreadsheet, Eye, Download, Loader2 } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ChevronDown, ChevronRight, AlertTriangle, CheckCircle2, TrendingDown, List, FileSpreadsheet, Eye, Download, Loader2, Send, X } from "lucide-react";
 import { Filters, type FilterState } from "@/components/filters";
 import { LessonDetailDialog } from "@/components/lesson-detail-dialog";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
 import type { Lesson, Project, LessonCategory, LessonSubcategory, ReferenceValue, ImpactLevel, ScoringConfig } from "@shared/schema";
 
 interface LessonWithRelations extends Lesson {
@@ -94,6 +97,10 @@ export default function Dashboard() {
   const [expandedSubcategories, setExpandedSubcategories] = useState<Set<number>>(new Set());
   const [showFullList, setShowFullList] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [applyMode, setApplyMode] = useState(false);
+  const [applyTargetProjectId, setApplyTargetProjectId] = useState<string>("");
+  const [selectedLessonIds, setSelectedLessonIds] = useState<Set<number>>(new Set());
+  const queryClient = useQueryClient();
 
   const { data: lessons = [], isLoading: lessonsLoading } = useQuery<LessonWithRelations[]>({
     queryKey: ["/api/lessons"],
@@ -225,6 +232,48 @@ export default function Dashboard() {
     }
   }, [buildExportParams, toast]);
 
+  const applyMutation = useMutation({
+    mutationFn: async ({ projectId, lessonIds }: { projectId: number; lessonIds: number[] }) => {
+      const res = await apiRequest("POST", `/api/projects/${projectId}/applied-lessons`, { lessonIds });
+      return res.json();
+    },
+    onSuccess: (data: { applied: number; skippedDuplicates: number }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+      if (applyTargetProjectId) {
+        queryClient.invalidateQueries({ queryKey: ["/api/projects", parseInt(applyTargetProjectId), "applied-lessons"] });
+      }
+      const msg = data.skippedDuplicates > 0
+        ? `${data.applied} lessons applied, ${data.skippedDuplicates} already applied (skipped).`
+        : `${data.applied} lessons applied to project.`;
+      toast({ title: "Lessons Applied", description: msg });
+      setApplyMode(false);
+      setSelectedLessonIds(new Set());
+      setApplyTargetProjectId("");
+    },
+    onError: (error: Error) => {
+      toast({ title: "Failed to apply lessons", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const toggleLessonSelection = (id: number) => {
+    setSelectedLessonIds((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
+
+  const handleApplyLessons = () => {
+    if (!applyTargetProjectId || selectedLessonIds.size === 0) return;
+    applyMutation.mutate({ projectId: parseInt(applyTargetProjectId), lessonIds: Array.from(selectedLessonIds) });
+  };
+
+  const exitApplyMode = () => {
+    setApplyMode(false);
+    setSelectedLessonIds(new Set());
+    setApplyTargetProjectId("");
+  };
+
   const couldBeBetterCount = lessons.filter((l) => l.type === "CouldHaveGoneBetter").length;
   const wentWellCount = lessons.filter((l) => l.type === "WentWell").length;
   const allCount = lessons.length;
@@ -307,11 +356,58 @@ export default function Dashboard() {
         />
       </Card>
 
+      {applyMode && (
+        <Card className="p-4 border-primary/30 bg-primary/5">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div className="flex items-center gap-3 flex-wrap flex-1">
+              <span className="text-sm font-medium">Apply filtered lessons to:</span>
+              <Select value={applyTargetProjectId} onValueChange={setApplyTargetProjectId}>
+                <SelectTrigger className="w-[320px]" data-testid="select-apply-target-project">
+                  <SelectValue placeholder="Select project" />
+                </SelectTrigger>
+                <SelectContent>
+                  {projects.map((p: any) => (
+                    <SelectItem key={p.id} value={String(p.id)}>{p.name} | {p.projectCode || `PRJ-${p.id}`}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Badge variant="secondary" className="text-xs no-default-active-elevate" data-testid="badge-selected-count">
+                {selectedLessonIds.size} selected
+              </Badge>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                onClick={handleApplyLessons}
+                disabled={!applyTargetProjectId || selectedLessonIds.size === 0 || applyMutation.isPending}
+                data-testid="button-confirm-apply"
+              >
+                {applyMutation.isPending ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Send className="w-3.5 h-3.5 mr-1.5" />}
+                Apply {selectedLessonIds.size} Lesson{selectedLessonIds.size !== 1 ? "s" : ""}
+              </Button>
+              <Button variant="ghost" size="sm" onClick={exitApplyMode} data-testid="button-cancel-apply">
+                <X className="w-3.5 h-3.5 mr-1" /> Cancel
+              </Button>
+            </div>
+          </div>
+        </Card>
+      )}
+
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <p className="text-sm text-muted-foreground" data-testid="text-lesson-count">
           {totalFilteredLessons} lesson{totalFilteredLessons !== 1 ? "s" : ""} across {activeGroups.length} subcategor{activeGroups.length !== 1 ? "ies" : "y"}
         </p>
         <div className="flex items-center gap-2">
+          {!applyMode && (
+            <Button
+              variant="outline"
+              onClick={() => setApplyMode(true)}
+              data-testid="button-apply-to-project"
+            >
+              <Send className="w-4 h-4 mr-1.5" />
+              Apply to Project
+            </Button>
+          )}
           <Button
             variant="outline"
             onClick={() => setShowFullList(true)}
@@ -391,6 +487,28 @@ export default function Dashboard() {
                     </div>
                   </CollapsibleTrigger>
                   <CollapsibleContent className="px-4 pb-4">
+                    {applyMode && (
+                      <div className="flex items-center gap-2 mb-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-xs"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const allIds = group.lessons.map(l => l.id);
+                            setSelectedLessonIds(prev => {
+                              const next = new Set(prev);
+                              const allSelected = allIds.every(id => next.has(id));
+                              allIds.forEach(id => allSelected ? next.delete(id) : next.add(id));
+                              return next;
+                            });
+                          }}
+                          data-testid={`button-select-all-${group.subcategory.id}`}
+                        >
+                          {group.lessons.every(l => selectedLessonIds.has(l.id)) ? "Deselect All" : "Select All"}
+                        </Button>
+                      </div>
+                    )}
                     <div className="space-y-1.5 mt-1">
                       {group.lessons
                         .sort((a, b) => new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime())
@@ -399,11 +517,20 @@ export default function Dashboard() {
                           return (
                             <button
                               key={lesson.id}
-                              onClick={() => setSelectedLesson(lesson)}
-                              className="w-full text-left p-2.5 rounded-md hover-elevate flex items-center justify-between gap-3"
+                              onClick={() => applyMode ? toggleLessonSelection(lesson.id) : setSelectedLesson(lesson)}
+                              className={`w-full text-left p-2.5 rounded-md hover-elevate flex items-center justify-between gap-3 ${applyMode && selectedLessonIds.has(lesson.id) ? "ring-2 ring-primary/40 bg-primary/5" : ""}`}
                               data-testid={`button-lesson-${lesson.id}`}
                             >
                               <div className="flex items-center gap-2.5 min-w-0">
+                                {applyMode && (
+                                  <Checkbox
+                                    checked={selectedLessonIds.has(lesson.id)}
+                                    onCheckedChange={() => toggleLessonSelection(lesson.id)}
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="flex-shrink-0"
+                                    data-testid={`checkbox-lesson-${lesson.id}`}
+                                  />
+                                )}
                                 <div className={`w-1 h-8 rounded-full flex-shrink-0 ${lessonIsCBB ? "bg-cbb" : "bg-ww"}`} />
                                 <div className="min-w-0">
                                   <p className="text-sm font-medium truncate"><span className="text-muted-foreground font-mono mr-1.5">#{lesson.id}</span>{lesson.name}</p>

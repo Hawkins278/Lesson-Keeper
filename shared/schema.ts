@@ -97,6 +97,18 @@ export const SCORING_DEFAULTS = {
   dailyDecrement: 1,
 } as const;
 
+export const appliedLessons = pgTable("applied_lessons", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  lessonId: integer("lesson_id").notNull().references(() => lessons.id),
+  targetProjectId: integer("target_project_id").notNull().references(() => projects.id),
+  appliedAt: timestamp("applied_at").defaultNow(),
+  appliedByUserId: varchar("applied_by_user_id"),
+});
+
+export const insertAppliedLessonSchema = createInsertSchema(appliedLessons).omit({ id: true, appliedAt: true });
+export type InsertAppliedLesson = z.infer<typeof insertAppliedLessonSchema>;
+export type AppliedLesson = typeof appliedLessons.$inferSelect;
+
 export const insertReferenceValueSchema = createInsertSchema(referenceValues).omit({ id: true });
 export type InsertReferenceValue = z.infer<typeof insertReferenceValueSchema>;
 export type ReferenceValue = typeof referenceValues.$inferSelect;

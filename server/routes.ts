@@ -254,6 +254,49 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/projects/:id/applied-lessons", isAuthenticated, async (req: any, res) => {
+    try {
+      const targetProjectId = parseInt(req.params.id);
+      if (isNaN(targetProjectId)) return res.status(400).json({ message: "Invalid project ID" });
+      const project = await storage.getProject(targetProjectId);
+      if (!project) return res.status(404).json({ message: "Project not found" });
+      const { lessonIds } = req.body;
+      if (!Array.isArray(lessonIds) || lessonIds.length === 0) {
+        return res.status(400).json({ message: "lessonIds must be a non-empty array" });
+      }
+      const userId = req.user?.claims?.sub || null;
+      const applied = await storage.applyLessonsToProject(lessonIds.map(Number), targetProjectId, userId);
+      res.json({ applied: applied.length, skippedDuplicates: lessonIds.length - applied.length });
+    } catch (error) {
+      console.error("Error applying lessons to project:", error);
+      res.status(500).json({ message: "Failed to apply lessons" });
+    }
+  });
+
+  app.get("/api/projects/:id/applied-lessons", isAuthenticated, async (req: any, res) => {
+    try {
+      const targetProjectId = parseInt(req.params.id);
+      if (isNaN(targetProjectId)) return res.status(400).json({ message: "Invalid project ID" });
+      const applied = await storage.getAppliedLessonsByProject(targetProjectId);
+      res.json(applied);
+    } catch (error) {
+      console.error("Error fetching applied lessons:", error);
+      res.status(500).json({ message: "Failed to fetch applied lessons" });
+    }
+  });
+
+  app.get("/api/lessons/:id/applications", isAuthenticated, async (req: any, res) => {
+    try {
+      const lessonId = parseInt(req.params.id);
+      if (isNaN(lessonId)) return res.status(400).json({ message: "Invalid lesson ID" });
+      const applications = await storage.getApplicationsForLesson(lessonId);
+      res.json(applications);
+    } catch (error) {
+      console.error("Error fetching lesson applications:", error);
+      res.status(500).json({ message: "Failed to fetch lesson applications" });
+    }
+  });
+
   app.get("/api/lessons", isAuthenticated, async (_req, res) => {
     try {
       const lessons = await storage.getLessons();

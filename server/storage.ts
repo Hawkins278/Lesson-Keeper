@@ -5,10 +5,11 @@ import {
   type Lesson, type InsertLesson,
   type ReferenceValue, type InsertReferenceValue,
   type ImpactLevel, type InsertImpactLevel,
+  type AppliedLesson, type InsertAppliedLesson,
   type User, type UserRole,
   type ScoringConfig,
   projects, lessonCategories, lessonSubcategories, lessons, referenceValues, impactLevels, users,
-  scoringConfig, SCORING_DEFAULTS,
+  scoringConfig, SCORING_DEFAULTS, appliedLessons,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, sql, ne, or, inArray } from "drizzle-orm";
@@ -75,6 +76,12 @@ export interface IStorage {
   getScoringConfig(): Promise<ScoringConfig>;
   updateScoringConfig(data: { initialScore: number; incrementScore: number; dailyDecrement: number }): Promise<ScoringConfig>;
   recalculateAllScores(config: { initialScore: number; incrementScore: number; dailyDecrement: number }): Promise<void>;
+
+  applyLessonsToProject(lessonIds: number[], targetProjectId: number, userId: string | null): Promise<AppliedLesson[]>;
+  getAppliedLessonsByProject(targetProjectId: number): Promise<(AppliedLesson & { lesson?: Lesson & { subcategory?: LessonSubcategory; category?: LessonCategory; impact?: ImpactLevel; project?: Project } })[]>;
+  getApplicationsForLesson(lessonId: number): Promise<(AppliedLesson & { targetProject?: Project })[]>;
+  getAppliedLessonCount(lessonId: number): Promise<number>;
+  isLessonAppliedToProject(lessonId: number, targetProjectId: number): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -490,6 +497,58 @@ export class DatabaseStorage implements IStorage {
         firstRecordedDate: firstDate,
       }).where(eq(lessonSubcategories.id, sub.id));
     }
+  }
+
+  async applyLessonsToProject(lessonIds: number[], targetProjectId: number, userId: string | null): Promise<AppliedLesson[]> {
+    const results: AppliedLesson[] = [];
+    for (const lessonId of lessonIds) {
+      const existing = await this.isLessonAppliedToProject(lessonId, targetProjectId);
+      if (existing) continue;
+      const [applied] = await db.insert(appliedLessons).values({
+        lessonId,
+        targetProjectId,
+        appliedByUserId: userId,
+      }).returning();
+      results.push(applied);
+    }
+    return results;
+  }
+
+  async getAppliedLessonsByProject(targetProjectId: number): Promise<(AppliedLesson & { lesson?: Lesson & { subcategory?: LessonSubcategory; category?: LessonCategory; impact?: ImpactLevel; project?: Project } })[]> {
+    const rows = await db.select().from(appliedLessons).where(eq(appliedLessons.targetProjectId, targetProjectId)).orderBy(desc(appliedLessons.appliedAt));
+    const allLessons = await this.getLessons();
+    const allCategories = await this.getCategories();
+    const allSubcategories = await this.getSubcategories();
+    const allImpacts = await this.getImpactLevels();
+    const allProjects = await this.getProjects();
+    return rows.map((row) => {
+      const lesson = allLessons.find((l) => l.id === row.lessonId);
+      if (!lesson) return { ...row };
+      const subcategory = allSubcategories.find((s) => s.id === lesson.subcategoryId);
+      const category = subcategory ? allCategories.find((c) => c.id === subcategory.categoryId) : undefined;
+      const impact = lesson.impactId ? allImpacts.find((i) => i.id === lesson.impactId) : undefined;
+      const project = allProjects.find((p) => p.id === lesson.projectId);
+      return { ...row, lesson: { ...lesson, subcategory, category, impact, project } };
+    });
+  }
+
+  async getApplicationsForLesson(lessonId: number): Promise<(AppliedLesson & { targetProject?: Project })[]> {
+    const rows = await db.select().from(appliedLessons).where(eq(appliedLessons.lessonId, lessonId)).orderBy(desc(appliedLessons.appliedAt));
+    const allProjects = await this.getProjects();
+    return rows.map((row) => ({
+      ...row,
+      targetProject: allProjects.find((p) => p.id === row.targetProjectId),
+    }));
+  }
+
+  async getAppliedLessonCount(lessonId: number): Promise<number> {
+    const [result] = await db.select({ count: sql<number>`count(*)` }).from(appliedLessons).where(eq(appliedLessons.lessonId, lessonId));
+    return Number(result?.count || 0);
+  }
+
+  async isLessonAppliedToProject(lessonId: number, targetProjectId: number): Promise<boolean> {
+    const [row] = await db.select().from(appliedLessons).where(and(eq(appliedLessons.lessonId, lessonId), eq(appliedLessons.targetProjectId, targetProjectId)));
+    return !!row;
   }
 }
 

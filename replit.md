@@ -44,6 +44,7 @@ client/src/components/     - Sidebar, Filters, LessonDetailDialog, ThemeToggle
 - **LessonCategories**: name, description
 - **LessonSubcategories**: name, categoryId, currentScore, lastScoreUpdatedAt, firstRecordedDate
 - **Lessons**: projectId, subcategoryId, phase, type (WentWell/CouldHaveGoneBetter), name, eventDescription, keyLearningOrAction
+- **AppliedLessons**: lessonId, targetProjectId, appliedAt, appliedByUserId — tracks lessons applied TO a project (distinct from lessons FROM a project); prevents duplicate applications; tracks count per lesson
 - **ReferenceValues**: type (ProjectType|ProjectPhase), value — stores configurable dropdown values for template generation
 - **ScoringConfig**: initialScore, incrementScore, dailyDecrement — configurable scoring parameters
 
@@ -58,18 +59,23 @@ client/src/components/     - Sidebar, Filters, LessonDetailDialog, ThemeToggle
 
 ## Excel Template Format
 - **Sheet 1 "Lessons Template"**: Structured layout with styled section headers (dark blue) and column headers (light blue)
-  - PROJECT DETAILS section: single row for ProjectType, ProjectName, ProjectCloseDate, ProjectManager, ProjectDescription
-  - COULD HAVE GONE BETTER section: multiple lesson rows
+  - PROJECT section: single dropdown to select existing project by "Name | PRJ-XXX" pair
+  - COULD HAVE GONE BETTER section: multiple lesson rows with ProjectPhase per lesson
   - WENT WELL section: same lesson columns, multiple rows
-  - Dropdown validation on ProjectType, ProjectPhase, LessonCategory, LessonSubcategory cells linked to Reference Data sheet
-- **Sheet 2 "Reference Data"**: Valid values for ProjectType, ProjectPhase, LessonCategory, LessonSubcategory
+  - Dropdown validation on Project, ProjectPhase, LessonCategory, LessonSubcategory, Impact cells linked to Reference Data sheet
+- **Sheet 2 "Reference Data"**: Valid values for Projects (Name | ID pairs, auto-updated), ProjectPhase, LessonCategory, LessonSubcategory, Impact
 - Template generation uses `exceljs` library for styling; upload parsing uses `xlsx` (SheetJS)
 
 ## API Endpoints
 - POST /api/projects — create a new project with auto-assigned projectCode (admin)
 - PATCH /api/projects/:id — update project fields including status (admin)
+- POST /api/projects/:id/applied-lessons — apply lessons to a project (body: {lessonIds: number[]})
+- GET /api/projects/:id/applied-lessons — get lessons applied to a project (enriched with lesson details)
+- GET /api/lessons/:id/applications — get which projects a lesson has been applied to
 
 ## Recent Changes
+- 2026-02-26: Added "Apply to Project" feature: dashboard button to select filtered lessons and apply them to a target project; projects page shows "Project Lessons" and "Lessons Applied" tabs; applied_lessons table tracks which lessons are applied to which projects with duplicate prevention
+- 2026-02-26: Simplified upload template: replaced 5 project detail columns with single project selector dropdown (Name | PRJ-XXX pairs from existing projects)
 - 2026-02-26: Added project creation form on Projects page with name (required), type (required), PM, close date, status, description
 - 2026-02-26: Added projectCode (auto-assigned PRJ-XXX) and status (New/Live/Closed) fields to projects
 - 2026-02-26: Added graceful shutdown handler (SIGTERM/SIGINT) to server/index.ts for clean process termination

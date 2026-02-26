@@ -8,13 +8,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
-import { FolderOpen, CalendarDays, User, ChevronDown, ChevronRight, Loader2, Pencil, X, Save, Download, List, LayoutGrid, Plus, Hash } from "lucide-react";
+import { FolderOpen, CalendarDays, User, ChevronDown, ChevronRight, Loader2, Pencil, X, Save, Download, List, LayoutGrid, Plus, Hash, Send } from "lucide-react";
 import { LessonDetailDialog } from "@/components/lesson-detail-dialog";
 import { formatUKDate } from "@/lib/format-date";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { Project, Lesson, LessonCategory, LessonSubcategory, ImpactLevel, ReferenceValue } from "@shared/schema";
+import type { Project, Lesson, LessonCategory, LessonSubcategory, ImpactLevel, ReferenceValue, AppliedLesson } from "@shared/schema";
 
 type EnrichedLesson = Lesson & { category?: LessonCategory; subcategory?: LessonSubcategory; impact?: ImpactLevel };
 
@@ -223,6 +223,156 @@ function ProjectLessons({ projectId, isAdmin }: { projectId: number; isAdmin: bo
         open={!!selectedLesson}
         onOpenChange={(open) => { if (!open) setSelectedLesson(null); }}
         isAdmin={isAdmin}
+      />
+    </div>
+  );
+}
+
+type ProjectLessonTab = "from-project" | "applied-to";
+
+function ProjectExpandedView({ projectId, isAdmin }: { projectId: number; isAdmin: boolean }) {
+  const [activeTab, setActiveTab] = useState<ProjectLessonTab>("from-project");
+
+  const { data: appliedCount } = useQuery<AppliedLessonWithDetails[]>({
+    queryKey: ["/api/projects", projectId, "applied-lessons"],
+  });
+
+  return (
+    <div className="px-4 pb-4">
+      <Separator />
+      <div className="flex items-center gap-1 mt-3 mb-2">
+        <Button
+          variant={activeTab === "from-project" ? "default" : "outline"}
+          size="sm"
+          onClick={() => setActiveTab("from-project")}
+          data-testid={`button-tab-project-lessons-${projectId}`}
+        >
+          <List className="w-3.5 h-3.5 mr-1.5" />
+          Project Lessons
+        </Button>
+        <Button
+          variant={activeTab === "applied-to" ? "default" : "outline"}
+          size="sm"
+          onClick={() => setActiveTab("applied-to")}
+          data-testid={`button-tab-applied-lessons-${projectId}`}
+        >
+          <Send className="w-3.5 h-3.5 mr-1.5" />
+          Lessons Applied
+          {(appliedCount?.length ?? 0) > 0 && (
+            <Badge variant="secondary" className="ml-1.5 text-xs no-default-active-elevate no-default-hover-elevate">{appliedCount?.length}</Badge>
+          )}
+        </Button>
+      </div>
+      {activeTab === "from-project" ? (
+        <ProjectLessons projectId={projectId} isAdmin={isAdmin} />
+      ) : (
+        <AppliedLessons projectId={projectId} />
+      )}
+    </div>
+  );
+}
+
+type AppliedLessonWithDetails = AppliedLesson & {
+  lesson?: Lesson & { subcategory?: LessonSubcategory; category?: LessonCategory; impact?: ImpactLevel; project?: Project };
+};
+
+function AppliedLessons({ projectId }: { projectId: number }) {
+  const [selectedLesson, setSelectedLesson] = useState<(EnrichedLesson & { project?: Project }) | null>(null);
+  const { data: appliedLessons = [], isLoading } = useQuery<AppliedLessonWithDetails[]>({
+    queryKey: ["/api/projects", projectId, "applied-lessons"],
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center gap-2 py-4 px-4 text-sm text-muted-foreground">
+        <Loader2 className="w-4 h-4 animate-spin" />
+        Loading applied lessons...
+      </div>
+    );
+  }
+
+  if (appliedLessons.length === 0) {
+    return (
+      <div className="py-4 px-4 text-sm text-muted-foreground">
+        No lessons have been applied to this project yet. Use the dashboard to select and apply relevant lessons.
+      </div>
+    );
+  }
+
+  const groupedBySubcategory = new Map<number, { subcategory: LessonSubcategory; category: LessonCategory; items: AppliedLessonWithDetails[] }>();
+  for (const al of appliedLessons) {
+    if (!al.lesson?.subcategory || !al.lesson?.category) continue;
+    const subId = al.lesson.subcategory.id;
+    if (!groupedBySubcategory.has(subId)) {
+      groupedBySubcategory.set(subId, { subcategory: al.lesson.subcategory, category: al.lesson.category, items: [] });
+    }
+    groupedBySubcategory.get(subId)!.items.push(al);
+  }
+
+  const groups = Array.from(groupedBySubcategory.values()).sort((a, b) =>
+    `${a.category.name}-${a.subcategory.name}`.localeCompare(`${b.category.name}-${b.subcategory.name}`)
+  );
+
+  return (
+    <div className="space-y-3 pt-2">
+      <p className="text-xs text-muted-foreground">{appliedLessons.length} lesson{appliedLessons.length !== 1 ? "s" : ""} applied across {groups.length} subcategor{groups.length !== 1 ? "ies" : "y"}</p>
+      <div className="space-y-4">
+        {groups.map((group) => (
+          <div key={group.subcategory.id} className="space-y-1">
+            <div className="flex items-center gap-2">
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground" data-testid={`text-applied-category-${group.subcategory.id}`}>
+                {group.category.name}
+              </h4>
+              <span className="text-xs text-muted-foreground/60">·</span>
+              <span className="text-xs font-medium text-muted-foreground/80">{group.subcategory.name}</span>
+              <Badge variant="secondary" className="text-xs no-default-active-elevate ml-auto">{group.items.length}</Badge>
+            </div>
+            <div className="space-y-1.5 pl-3">
+              {group.items.map((al) => {
+                if (!al.lesson) return null;
+                const lesson = al.lesson;
+                const isWentWell = lesson.type === "WentWell";
+                return (
+                  <div
+                    key={al.id}
+                    className="flex items-start gap-3 p-3 rounded-md border cursor-pointer hover-elevate"
+                    onClick={() => setSelectedLesson(lesson as any)}
+                    data-testid={`card-applied-lesson-${al.id}`}
+                  >
+                    <div className={`w-1 self-stretch rounded-full flex-shrink-0 ${isWentWell ? "bg-ww" : "bg-cbb"}`} />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium truncate">
+                        <span className="text-muted-foreground font-mono mr-1.5">#{lesson.id}</span>{lesson.name}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        From: {lesson.project?.name || "—"} · {lesson.phase}
+                      </p>
+                      <div className="flex flex-wrap items-center gap-2 mt-1.5">
+                        <Badge
+                          className={`text-xs no-default-active-elevate ${isWentWell ? "bg-ww/15 text-ww border-ww/30" : "bg-cbb/15 text-cbb border-cbb/30"}`}
+                          variant="outline"
+                        >
+                          {isWentWell ? "WW" : "CBB"}
+                        </Badge>
+                        {lesson.impact && (
+                          <Badge variant="outline" className="text-xs no-default-active-elevate">
+                            {lesson.impact.description} ({lesson.impact.weightingPercent}%)
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+      <LessonDetailDialog
+        lesson={selectedLesson}
+        open={!!selectedLesson}
+        onOpenChange={(open) => { if (!open) setSelectedLesson(null); }}
+        isAdmin={false}
       />
     </div>
   );
@@ -544,10 +694,7 @@ export default function ProjectsPage() {
                   </div>
                 )}
                 {isExpanded && !isEditing && (
-                  <div className="px-4 pb-4">
-                    <Separator />
-                    <ProjectLessons projectId={project.id} isAdmin={isAdminUser} />
-                  </div>
+                  <ProjectExpandedView projectId={project.id} isAdmin={isAdminUser} />
                 )}
               </Card>
             );
