@@ -631,6 +631,20 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/reference-data/:type", isAuthenticated, async (req: any, res) => {
+    try {
+      const { type } = req.params;
+      if (type !== "ProjectType" && type !== "ProjectPhase") {
+        return res.status(400).json({ message: "Invalid type" });
+      }
+      const values = await storage.getReferenceValues(type);
+      res.json(values);
+    } catch (error) {
+      console.error("Error fetching reference data by type:", error);
+      res.status(500).json({ message: "Failed to fetch reference data" });
+    }
+  });
+
   app.delete("/api/reference-data/:type/:id", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
       const { type, id } = req.params;
