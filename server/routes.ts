@@ -241,7 +241,16 @@ export async function registerRoutes(
 
   app.get("/api/lessons/export", isAuthenticated, async (req: any, res) => {
     try {
-      const { projectType, phase, categoryId, subcategoryId, search, tab } = req.query as Record<string, string | undefined>;
+      const { search, tab } = req.query as Record<string, string | undefined>;
+      const toArray = (v: string | string[] | undefined): string[] => {
+        if (!v) return [];
+        return Array.isArray(v) ? v : [v];
+      };
+      const projectTypes = toArray(req.query.projectType);
+      const phases = toArray(req.query.phase);
+      const categoryIds = toArray(req.query.categoryId).map(Number).filter(n => !isNaN(n));
+      const subcategoryIds = toArray(req.query.subcategoryId).map(Number).filter(n => !isNaN(n));
+
       const allLessons = await storage.getLessons();
       const allSubcategories = await storage.getSubcategories();
       const allCategories = await storage.getCategories();
@@ -249,18 +258,16 @@ export async function registerRoutes(
       const dailyDecrement = scoringConfigData?.dailyDecrement ?? 1;
 
       let filtered = allLessons;
-      if (projectType) filtered = filtered.filter(l => l.project?.projectType === projectType);
-      if (phase) filtered = filtered.filter(l => l.phase === phase);
-      if (categoryId) {
-        const catId = parseInt(categoryId);
+      if (projectTypes.length > 0) filtered = filtered.filter(l => l.project?.projectType && projectTypes.includes(l.project.projectType));
+      if (phases.length > 0) filtered = filtered.filter(l => phases.includes(l.phase));
+      if (categoryIds.length > 0) {
         filtered = filtered.filter(l => {
           const sub = l.subcategory || allSubcategories.find(s => s.id === l.subcategoryId);
-          return sub && sub.categoryId === catId;
+          return sub && categoryIds.includes(sub.categoryId);
         });
       }
-      if (subcategoryId) {
-        const subId = parseInt(subcategoryId);
-        filtered = filtered.filter(l => l.subcategoryId === subId);
+      if (subcategoryIds.length > 0) {
+        filtered = filtered.filter(l => subcategoryIds.includes(l.subcategoryId));
       }
       if (search) {
         const s = search.toLowerCase();

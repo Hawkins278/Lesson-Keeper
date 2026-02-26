@@ -1,14 +1,16 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { X, Search } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
+import { X, Search, ChevronDown } from "lucide-react";
 import type { LessonCategory, LessonSubcategory, ReferenceValue } from "@shared/schema";
 
 export interface FilterState {
-  projectType: string | null;
-  phase: string | null;
-  categoryId: string | null;
-  subcategoryId: string | null;
+  projectTypes: string[];
+  phases: string[];
+  categoryIds: string[];
+  subcategoryIds: string[];
   search: string;
 }
 
@@ -21,6 +23,69 @@ interface FiltersProps {
   referencePhases: ReferenceValue[];
 }
 
+function MultiSelectFilter({
+  label,
+  options,
+  selected,
+  onToggle,
+  testId,
+}: {
+  label: string;
+  options: { value: string; label: string }[];
+  selected: string[];
+  onToggle: (value: string) => void;
+  testId: string;
+}) {
+  return (
+    <div className="space-y-1 min-w-[150px]">
+      <label className="text-xs font-medium text-muted-foreground">{label}</label>
+      <Popover>
+        <PopoverTrigger asChild>
+          <Button
+            variant="outline"
+            className="w-full justify-between font-normal h-9 px-3"
+            data-testid={testId}
+          >
+            <span className="truncate text-sm">
+              {selected.length === 0
+                ? `All ${label.toLowerCase()}`
+                : selected.length === 1
+                  ? options.find((o) => o.value === selected[0])?.label || selected[0]
+                  : `${selected.length} selected`}
+            </span>
+            <div className="flex items-center gap-1 ml-1 flex-shrink-0">
+              {selected.length > 0 && (
+                <Badge variant="secondary" className="text-xs px-1.5 py-0 h-5 no-default-active-elevate no-default-hover-elevate">
+                  {selected.length}
+                </Badge>
+              )}
+              <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />
+            </div>
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-[220px] p-2 max-h-[280px] overflow-y-auto" align="start">
+          {options.map((option) => (
+            <label
+              key={option.value}
+              className="flex items-center gap-2 px-2 py-1.5 rounded-sm hover:bg-accent cursor-pointer text-sm"
+              data-testid={`${testId}-option-${option.value}`}
+            >
+              <Checkbox
+                checked={selected.includes(option.value)}
+                onCheckedChange={() => onToggle(option.value)}
+              />
+              <span className="truncate">{option.label}</span>
+            </label>
+          ))}
+          {options.length === 0 && (
+            <p className="text-xs text-muted-foreground text-center py-2">No options available</p>
+          )}
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
+}
+
 export function Filters({
   filters,
   onFiltersChange,
@@ -29,26 +94,30 @@ export function Filters({
   referenceProjectTypes,
   referencePhases,
 }: FiltersProps) {
-  const filteredSubcategories = filters.categoryId
-    ? subcategories.filter((s) => s.categoryId === parseInt(filters.categoryId!))
-    : subcategories;
+  const filteredSubcategories =
+    filters.categoryIds.length > 0
+      ? subcategories.filter((s) => filters.categoryIds.includes(String(s.categoryId)))
+      : subcategories;
 
   const hasActiveFilters =
-    filters.projectType !== null ||
-    filters.phase !== null ||
-    filters.categoryId !== null ||
-    filters.subcategoryId !== null ||
+    filters.projectTypes.length > 0 ||
+    filters.phases.length > 0 ||
+    filters.categoryIds.length > 0 ||
+    filters.subcategoryIds.length > 0 ||
     filters.search !== "";
 
   const clearAll = () => {
     onFiltersChange({
-      projectType: null,
-      phase: null,
-      categoryId: null,
-      subcategoryId: null,
+      projectTypes: [],
+      phases: [],
+      categoryIds: [],
+      subcategoryIds: [],
       search: "",
     });
   };
+
+  const toggleValue = (arr: string[], value: string) =>
+    arr.includes(value) ? arr.filter((v) => v !== value) : [...arr, value];
 
   return (
     <div className="flex flex-wrap items-end gap-3">
@@ -66,93 +135,46 @@ export function Filters({
         </div>
       </div>
 
-      <div className="space-y-1 min-w-[150px]">
-        <label className="text-xs font-medium text-muted-foreground">Project Type</label>
-        <Select
-          value={filters.projectType || "all"}
-          onValueChange={(v) => onFiltersChange({ ...filters, projectType: v === "all" ? null : v })}
-        >
-          <SelectTrigger data-testid="select-project-type">
-            <SelectValue placeholder="All types" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All types</SelectItem>
-            {referenceProjectTypes.map((pt) => (
-              <SelectItem key={pt.id} value={pt.value}>
-                {pt.value}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+      <MultiSelectFilter
+        label="Project Type"
+        options={referenceProjectTypes.map((pt) => ({ value: pt.value, label: pt.value }))}
+        selected={filters.projectTypes}
+        onToggle={(v) => onFiltersChange({ ...filters, projectTypes: toggleValue(filters.projectTypes, v) })}
+        testId="select-project-type"
+      />
 
-      <div className="space-y-1 min-w-[140px]">
-        <label className="text-xs font-medium text-muted-foreground">Phase</label>
-        <Select
-          value={filters.phase || "all"}
-          onValueChange={(v) => onFiltersChange({ ...filters, phase: v === "all" ? null : v })}
-        >
-          <SelectTrigger data-testid="select-phase">
-            <SelectValue placeholder="All phases" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All phases</SelectItem>
-            {referencePhases.map((p) => (
-              <SelectItem key={p.id} value={p.value}>
-                {p.value}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+      <MultiSelectFilter
+        label="Phase"
+        options={referencePhases.map((p) => ({ value: p.value, label: p.value }))}
+        selected={filters.phases}
+        onToggle={(v) => onFiltersChange({ ...filters, phases: toggleValue(filters.phases, v) })}
+        testId="select-phase"
+      />
 
-      <div className="space-y-1 min-w-[150px]">
-        <label className="text-xs font-medium text-muted-foreground">Category</label>
-        <Select
-          value={filters.categoryId || "all"}
-          onValueChange={(v) =>
-            onFiltersChange({
-              ...filters,
-              categoryId: v === "all" ? null : v,
-              subcategoryId: null,
-            })
-          }
-        >
-          <SelectTrigger data-testid="select-category">
-            <SelectValue placeholder="All categories" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All categories</SelectItem>
-            {categories.map((c) => (
-              <SelectItem key={c.id} value={String(c.id)}>
-                {c.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+      <MultiSelectFilter
+        label="Category"
+        options={categories.map((c) => ({ value: String(c.id), label: c.name }))}
+        selected={filters.categoryIds}
+        onToggle={(v) => {
+          const newCats = toggleValue(filters.categoryIds, v);
+          const validSubIds = newCats.length > 0
+            ? filters.subcategoryIds.filter((sid) => {
+                const sub = subcategories.find((s) => String(s.id) === sid);
+                return sub && newCats.includes(String(sub.categoryId));
+              })
+            : filters.subcategoryIds;
+          onFiltersChange({ ...filters, categoryIds: newCats, subcategoryIds: validSubIds });
+        }}
+        testId="select-category"
+      />
 
-      <div className="space-y-1 min-w-[150px]">
-        <label className="text-xs font-medium text-muted-foreground">Subcategory</label>
-        <Select
-          value={filters.subcategoryId || "all"}
-          onValueChange={(v) =>
-            onFiltersChange({ ...filters, subcategoryId: v === "all" ? null : v })
-          }
-        >
-          <SelectTrigger data-testid="select-subcategory">
-            <SelectValue placeholder="All subcategories" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All subcategories</SelectItem>
-            {filteredSubcategories.map((s) => (
-              <SelectItem key={s.id} value={String(s.id)}>
-                {s.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+      <MultiSelectFilter
+        label="Subcategory"
+        options={filteredSubcategories.map((s) => ({ value: String(s.id), label: s.name }))}
+        selected={filters.subcategoryIds}
+        onToggle={(v) => onFiltersChange({ ...filters, subcategoryIds: toggleValue(filters.subcategoryIds, v) })}
+        testId="select-subcategory"
+      />
 
       {hasActiveFilters && (
         <Button
