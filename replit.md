@@ -40,7 +40,7 @@ client/src/components/     - Sidebar, Filters, LessonDetailDialog, ThemeToggle
 
 ## Data Model
 - **Users**: id, email, firstName, lastName, profileImageUrl, role (user|admin)
-- **Projects**: projectType, name, closeDate, projectManager, description
+- **Projects**: projectCode (auto-assigned PRJ-XXX), projectType, name, closeDate, projectManager, description, status (New|Live|Closed)
 - **LessonCategories**: name, description
 - **LessonSubcategories**: name, categoryId, currentScore, lastScoreUpdatedAt, firstRecordedDate
 - **Lessons**: projectId, subcategoryId, phase, type (WentWell/CouldHaveGoneBetter), name, eventDescription, keyLearningOrAction
@@ -65,7 +65,14 @@ client/src/components/     - Sidebar, Filters, LessonDetailDialog, ThemeToggle
 - **Sheet 2 "Reference Data"**: Valid values for ProjectType, ProjectPhase, LessonCategory, LessonSubcategory
 - Template generation uses `exceljs` library for styling; upload parsing uses `xlsx` (SheetJS)
 
+## API Endpoints
+- POST /api/projects — create a new project with auto-assigned projectCode (admin)
+- PATCH /api/projects/:id — update project fields including status (admin)
+
 ## Recent Changes
+- 2026-02-26: Added project creation form on Projects page with name (required), type (required), PM, close date, status, description
+- 2026-02-26: Added projectCode (auto-assigned PRJ-XXX) and status (New/Live/Closed) fields to projects
+- 2026-02-26: Added graceful shutdown handler (SIGTERM/SIGINT) to server/index.ts for clean process termination
 - 2026-02-15: Added Full Lesson List dialog on Dashboard with filter summary, lesson details, and Excel download
 - 2026-02-15: Added GET /api/lessons/export endpoint with filter query params for dashboard Excel export
 - 2026-02-15: Added Scoring Rates page (/scoring-rates) with configurable scoring parameters and impact level management

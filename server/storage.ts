@@ -17,8 +17,9 @@ export interface IStorage {
   getProjects(): Promise<Project[]>;
   getProject(id: number): Promise<Project | undefined>;
   findProjectByNameAndType(name: string, projectType: string): Promise<Project | undefined>;
+  generateProjectCode(): Promise<string>;
   createProject(project: InsertProject): Promise<Project>;
-  updateProject(id: number, data: Partial<InsertProject>): Promise<Project | undefined>;
+  updateProject(id: number, data: Partial<InsertProject & { status: string }>): Promise<Project | undefined>;
 
   getCategories(): Promise<LessonCategory[]>;
   findCategoryByName(name: string): Promise<LessonCategory | undefined>;
@@ -91,12 +92,21 @@ export class DatabaseStorage implements IStorage {
     return project;
   }
 
+  async generateProjectCode(): Promise<string> {
+    const [result] = await db.select({ maxCode: sql<string>`max(project_code)` }).from(projects);
+    const maxCode = result?.maxCode;
+    if (!maxCode) return "PRJ-001";
+    const num = parseInt(maxCode.replace("PRJ-", ""), 10);
+    return `PRJ-${String(num + 1).padStart(3, "0")}`;
+  }
+
   async createProject(project: InsertProject): Promise<Project> {
-    const [created] = await db.insert(projects).values(project).returning();
+    const projectCode = await this.generateProjectCode();
+    const [created] = await db.insert(projects).values({ ...project, projectCode }).returning();
     return created;
   }
 
-  async updateProject(id: number, data: Partial<InsertProject>): Promise<Project | undefined> {
+  async updateProject(id: number, data: Partial<InsertProject & { status: string }>): Promise<Project | undefined> {
     const [updated] = await db.update(projects).set(data).where(eq(projects.id, id)).returning();
     return updated;
   }

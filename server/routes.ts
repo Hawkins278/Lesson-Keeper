@@ -51,17 +51,42 @@ export async function registerRoutes(
     }
   });
 
+  const VALID_STATUSES = ["New", "Live", "Closed"];
+
+  app.post("/api/projects", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const { name, projectType, closeDate, projectManager, description, status } = req.body;
+      if (!name || !projectType) {
+        return res.status(400).json({ message: "Project name and type are required" });
+      }
+      const resolvedStatus = status && VALID_STATUSES.includes(status) ? status : "New";
+      const project = await storage.createProject({
+        name,
+        projectType,
+        closeDate: closeDate || null,
+        projectManager: projectManager || null,
+        description: description || null,
+        status: resolvedStatus,
+      });
+      res.status(201).json(project);
+    } catch (error) {
+      console.error("Error creating project:", error);
+      res.status(500).json({ message: "Failed to create project" });
+    }
+  });
+
   app.patch("/api/projects/:id", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
       if (isNaN(id)) return res.status(400).json({ message: "Invalid project ID" });
-      const { name, projectType, closeDate, projectManager, description } = req.body;
+      const { name, projectType, closeDate, projectManager, description, status } = req.body;
       const updateData: any = {};
       if (name !== undefined) updateData.name = name;
       if (projectType !== undefined) updateData.projectType = projectType;
       if (closeDate !== undefined) updateData.closeDate = closeDate;
       if (projectManager !== undefined) updateData.projectManager = projectManager;
       if (description !== undefined) updateData.description = description;
+      if (status !== undefined && VALID_STATUSES.includes(status)) updateData.status = status;
       const updated = await storage.updateProject(id, updateData);
       if (!updated) return res.status(404).json({ message: "Project not found" });
       res.json(updated);

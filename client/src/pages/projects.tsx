@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
-import { FolderOpen, CalendarDays, User, ChevronDown, ChevronRight, Loader2, Pencil, X, Save, Download, List, LayoutGrid } from "lucide-react";
+import { FolderOpen, CalendarDays, User, ChevronDown, ChevronRight, Loader2, Pencil, X, Save, Download, List, LayoutGrid, Plus, Hash } from "lucide-react";
 import { LessonDetailDialog } from "@/components/lesson-detail-dialog";
 import { formatUKDate } from "@/lib/format-date";
 import { useAuth } from "@/hooks/use-auth";
@@ -228,12 +228,109 @@ function ProjectLessons({ projectId, isAdmin }: { projectId: number; isAdmin: bo
   );
 }
 
+const PROJECT_STATUSES = ["New", "Live", "Closed"] as const;
+
+function ProjectCreateForm({ onCancel, onCreated }: { onCancel: () => void; onCreated: () => void }) {
+  const [name, setName] = useState("");
+  const [projectType, setProjectType] = useState("");
+  const [closeDate, setCloseDate] = useState("");
+  const [projectManager, setProjectManager] = useState("");
+  const [description, setDescription] = useState("");
+  const [status, setStatus] = useState<string>("New");
+  const { toast } = useToast();
+
+  const { data: projectTypes = [] } = useQuery<ReferenceValue[]>({
+    queryKey: ["/api/reference-data", "ProjectType"],
+  });
+
+  const createMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("POST", "/api/projects", {
+        name, projectType, closeDate: closeDate || null, projectManager: projectManager || null,
+        description: description || null, status,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+      toast({ title: "Project created" });
+      onCreated();
+    },
+    onError: (error: Error) => {
+      toast({ title: "Failed to create project", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const canSubmit = name.trim() && projectType;
+
+  return (
+    <Card className="p-4">
+      <h3 className="text-sm font-semibold mb-3">New Project</h3>
+      <div className="space-y-3">
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-muted-foreground">Project Name *</label>
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Enter project name" data-testid="input-create-project-name" />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-muted-foreground">Project Type *</label>
+            <Select value={projectType} onValueChange={setProjectType}>
+              <SelectTrigger data-testid="select-create-project-type">
+                <SelectValue placeholder="Select type" />
+              </SelectTrigger>
+              <SelectContent>
+                {projectTypes.map((pt) => (
+                  <SelectItem key={pt.id} value={pt.value}>{pt.value}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-muted-foreground">Project Manager</label>
+            <Input value={projectManager} onChange={(e) => setProjectManager(e.target.value)} placeholder="Optional" data-testid="input-create-project-manager" />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-muted-foreground">Close Date</label>
+            <Input value={closeDate} onChange={(e) => setCloseDate(e.target.value)} placeholder="DD-Mon-YYYY" data-testid="input-create-project-close-date" />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-muted-foreground">Status</label>
+            <Select value={status} onValueChange={setStatus}>
+              <SelectTrigger data-testid="select-create-project-status">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PROJECT_STATUSES.map((s) => (
+                  <SelectItem key={s} value={s}>{s}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-muted-foreground">Description</label>
+          <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} placeholder="Optional" data-testid="input-create-project-description" />
+        </div>
+        <div className="flex items-center gap-2 justify-end">
+          <Button variant="ghost" size="sm" onClick={onCancel} data-testid="button-cancel-create-project">
+            <X className="w-3.5 h-3.5 mr-1" /> Cancel
+          </Button>
+          <Button size="sm" onClick={() => createMutation.mutate()} disabled={!canSubmit || createMutation.isPending} data-testid="button-submit-create-project">
+            {createMutation.isPending ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <Save className="w-3.5 h-3.5 mr-1" />}
+            Create Project
+          </Button>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 function ProjectEditForm({ project, onCancel, onSaved }: { project: Project; onCancel: () => void; onSaved: () => void }) {
   const [name, setName] = useState(project.name);
   const [projectType, setProjectType] = useState(project.projectType);
   const [closeDate, setCloseDate] = useState(project.closeDate || "");
   const [projectManager, setProjectManager] = useState(project.projectManager || "");
   const [description, setDescription] = useState(project.description || "");
+  const [status, setStatus] = useState((project as any).status || "New");
   const { toast } = useToast();
 
   const { data: projectTypes = [] } = useQuery<ReferenceValue[]>({
@@ -243,7 +340,7 @@ function ProjectEditForm({ project, onCancel, onSaved }: { project: Project; onC
   const updateMutation = useMutation({
     mutationFn: async () => {
       await apiRequest("PATCH", `/api/projects/${project.id}`, {
-        name, projectType, closeDate, projectManager, description,
+        name, projectType, closeDate, projectManager, description, status,
       });
     },
     onSuccess: () => {
@@ -284,6 +381,19 @@ function ProjectEditForm({ project, onCancel, onSaved }: { project: Project; onC
           <label className="text-xs font-medium text-muted-foreground">Close Date</label>
           <Input value={closeDate} onChange={(e) => setCloseDate(e.target.value)} placeholder="DD-Mon-YYYY" data-testid="input-edit-project-close-date" />
         </div>
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-muted-foreground">Status</label>
+          <Select value={status} onValueChange={setStatus}>
+            <SelectTrigger data-testid="select-edit-project-status">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {PROJECT_STATUSES.map((s) => (
+                <SelectItem key={s} value={s}>{s}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
       <div className="space-y-1">
         <label className="text-xs font-medium text-muted-foreground">Description</label>
@@ -301,12 +411,22 @@ function ProjectEditForm({ project, onCancel, onSaved }: { project: Project; onC
   );
 }
 
+function statusBadgeClass(status: string) {
+  switch (status) {
+    case "New": return "bg-blue-100 text-blue-700 border-blue-300 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-700";
+    case "Live": return "bg-green-100 text-green-700 border-green-300 dark:bg-green-900/30 dark:text-green-400 dark:border-green-700";
+    case "Closed": return "bg-gray-100 text-gray-600 border-gray-300 dark:bg-gray-800/30 dark:text-gray-400 dark:border-gray-600";
+    default: return "";
+  }
+}
+
 export default function ProjectsPage() {
   const { user } = useAuth();
   const userRole = (user?.role as string || "").toLowerCase().trim();
   const isAdminUser = userRole === "admin" || userRole === "superadmin" || userRole === "superadministrator";
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [editingProjectId, setEditingProjectId] = useState<number | null>(null);
+  const [showCreateForm, setShowCreateForm] = useState(false);
 
   const { data: projects = [], isLoading } = useQuery<Project[]>({
     queryKey: ["/api/projects"],
@@ -331,23 +451,39 @@ export default function ProjectsPage() {
 
   return (
     <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-serif font-bold tracking-tight" data-testid="text-projects-title">Projects</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          {projects.length} project{projects.length !== 1 ? "s" : ""} with recorded lessons. Click a project to view its lessons.
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-serif font-bold tracking-tight" data-testid="text-projects-title">Projects</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            {projects.length} project{projects.length !== 1 ? "s" : ""}. Click a project to view its lessons.
+          </p>
+        </div>
+        {isAdminUser && !showCreateForm && (
+          <Button onClick={() => setShowCreateForm(true)} data-testid="button-new-project">
+            <Plus className="w-4 h-4 mr-1.5" /> New Project
+          </Button>
+        )}
       </div>
 
-      {projects.length === 0 ? (
+      {showCreateForm && (
+        <ProjectCreateForm
+          onCancel={() => setShowCreateForm(false)}
+          onCreated={() => setShowCreateForm(false)}
+        />
+      )}
+
+      {projects.length === 0 && !showCreateForm ? (
         <Card className="p-8 text-center">
           <FolderOpen className="w-10 h-10 mx-auto text-muted-foreground/40 mb-3" />
-          <p className="text-sm text-muted-foreground">No projects yet. Upload lessons from Excel to get started.</p>
+          <p className="text-sm text-muted-foreground">No projects yet. Create one or upload lessons from Excel to get started.</p>
         </Card>
       ) : (
         <div className="space-y-3">
           {projects.map((project) => {
             const isExpanded = expandedId === project.id;
             const isEditing = editingProjectId === project.id;
+            const projectStatus = (project as any).status || "New";
+            const projectCode = (project as any).projectCode || "";
             return (
               <Card key={project.id} className="overflow-visible" data-testid={`card-project-${project.id}`}>
                 {isEditing ? (
@@ -369,8 +505,16 @@ export default function ProjectsPage() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-3 flex-wrap">
+                          {projectCode && (
+                            <span className="text-xs font-mono text-muted-foreground flex items-center gap-0.5" data-testid={`text-project-code-${project.id}`}>
+                              <Hash className="w-3 h-3" />{projectCode}
+                            </span>
+                          )}
                           <h3 className="font-semibold text-sm" data-testid={`text-project-name-${project.id}`}>{project.name}</h3>
                           <Badge variant="outline" className="text-xs no-default-active-elevate">{project.projectType}</Badge>
+                          <Badge variant="outline" className={`text-xs no-default-active-elevate ${statusBadgeClass(projectStatus)}`} data-testid={`badge-project-status-${project.id}`}>
+                            {projectStatus}
+                          </Badge>
                         </div>
                         {project.description && (
                           <p className="text-xs text-muted-foreground line-clamp-1 mt-1 leading-relaxed">

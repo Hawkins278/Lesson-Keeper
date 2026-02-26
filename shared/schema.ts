@@ -9,11 +9,13 @@ export const lessonTypeEnum = pgEnum("lesson_type", ["WentWell", "CouldHaveGoneB
 
 export const projects = pgTable("projects", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  projectCode: text("project_code").notNull().unique(),
   projectType: text("project_type").notNull(),
   name: text("name").notNull(),
   closeDate: text("close_date"),
   projectManager: text("project_manager"),
   description: text("description"),
+  status: text("status").notNull().default("New"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -47,7 +49,7 @@ export const lessons = pgTable("lessons", {
   createdByUserId: varchar("created_by_user_id"),
 });
 
-export const insertProjectSchema = createInsertSchema(projects).omit({ id: true, createdAt: true });
+export const insertProjectSchema = createInsertSchema(projects).omit({ id: true, projectCode: true, createdAt: true });
 export const insertLessonCategorySchema = createInsertSchema(lessonCategories).omit({ id: true });
 export const insertLessonSubcategorySchema = createInsertSchema(lessonSubcategories).omit({ id: true, firstRecordedDate: true, currentScore: true, lastScoreUpdatedAt: true });
 export const insertLessonSchema = createInsertSchema(lessons).omit({ id: true, createdAt: true });
