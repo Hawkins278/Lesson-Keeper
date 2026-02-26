@@ -18,6 +18,49 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 
+const startTime = Date.now();
+function crashLog(message: string) {
+  const uptime = ((Date.now() - startTime) / 1000).toFixed(1);
+  const ts = new Date().toISOString();
+  console.error(`[CRASH-MONITOR ${ts}] (uptime: ${uptime}s) ${message}`);
+}
+
+process.on("uncaughtException", (err) => {
+  crashLog(`UNCAUGHT EXCEPTION: ${err.message}\n${err.stack}`);
+  process.exit(1);
+});
+
+process.on("unhandledRejection", (reason, promise) => {
+  crashLog(`UNHANDLED REJECTION: ${reason}`);
+  if (reason instanceof Error) {
+    crashLog(`Stack: ${reason.stack}`);
+  }
+});
+
+process.on("SIGTERM", () => {
+  crashLog("Received SIGTERM signal");
+  process.exit(0);
+});
+
+process.on("SIGINT", () => {
+  crashLog("Received SIGINT signal");
+  process.exit(0);
+});
+
+process.on("SIGHUP", () => {
+  crashLog("Received SIGHUP signal");
+});
+
+process.on("exit", (code) => {
+  crashLog(`Process exiting with code: ${code}`);
+});
+
+process.on("warning", (warning) => {
+  crashLog(`Process warning: ${warning.name} - ${warning.message}`);
+});
+
+crashLog("Process starting up");
+
 const app = express();
 const httpServer = createServer(app);
 
@@ -124,6 +167,13 @@ app.use((req, res, next) => {
     },
     () => {
       log(`serving on port ${port}`);
+      crashLog("Server fully started and listening");
+
+      // Heartbeat every 60s for monitoring process health and memory usage
+      setInterval(() => {
+        const mem = process.memoryUsage();
+        crashLog(`HEARTBEAT - RSS: ${(mem.rss / 1024 / 1024).toFixed(1)}MB, Heap: ${(mem.heapUsed / 1024 / 1024).toFixed(1)}/${(mem.heapTotal / 1024 / 1024).toFixed(1)}MB`);
+      }, 60000);
     },
   );
 })();
