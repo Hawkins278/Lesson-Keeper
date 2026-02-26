@@ -236,7 +236,6 @@ function ProjectCreateForm({ onCancel, onCreated }: { onCancel: () => void; onCr
   const [closeDate, setCloseDate] = useState("");
   const [projectManager, setProjectManager] = useState("");
   const [description, setDescription] = useState("");
-  const [status, setStatus] = useState<string>("New");
   const { toast } = useToast();
 
   const { data: projectTypes = [] } = useQuery<ReferenceValue[]>({
@@ -247,7 +246,7 @@ function ProjectCreateForm({ onCancel, onCreated }: { onCancel: () => void; onCr
     mutationFn: async () => {
       await apiRequest("POST", "/api/projects", {
         name, projectType, closeDate: closeDate || null, projectManager: projectManager || null,
-        description: description || null, status,
+        description: description || null,
       });
     },
     onSuccess: () => {
@@ -268,6 +267,14 @@ function ProjectCreateForm({ onCancel, onCreated }: { onCancel: () => void; onCr
       <div className="space-y-3">
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1">
+            <label className="text-xs font-medium text-muted-foreground">Project ID</label>
+            <Input value="Auto-assigned" disabled className="bg-muted text-muted-foreground" data-testid="input-create-project-id" />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-muted-foreground">Status</label>
+            <Input value="New" disabled className="bg-muted text-muted-foreground" data-testid="input-create-project-status" />
+          </div>
+          <div className="space-y-1">
             <label className="text-xs font-medium text-muted-foreground">Project Name *</label>
             <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Enter project name" data-testid="input-create-project-name" />
           </div>
@@ -286,29 +293,16 @@ function ProjectCreateForm({ onCancel, onCreated }: { onCancel: () => void; onCr
           </div>
           <div className="space-y-1">
             <label className="text-xs font-medium text-muted-foreground">Project Manager</label>
-            <Input value={projectManager} onChange={(e) => setProjectManager(e.target.value)} placeholder="Optional" data-testid="input-create-project-manager" />
+            <Input value={projectManager} onChange={(e) => setProjectManager(e.target.value)} placeholder="" data-testid="input-create-project-manager" />
           </div>
           <div className="space-y-1">
             <label className="text-xs font-medium text-muted-foreground">Close Date</label>
-            <Input value={closeDate} onChange={(e) => setCloseDate(e.target.value)} placeholder="DD-Mon-YYYY" data-testid="input-create-project-close-date" />
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-muted-foreground">Status</label>
-            <Select value={status} onValueChange={setStatus}>
-              <SelectTrigger data-testid="select-create-project-status">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {PROJECT_STATUSES.map((s) => (
-                  <SelectItem key={s} value={s}>{s}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Input value={closeDate} onChange={(e) => setCloseDate(e.target.value)} placeholder="" data-testid="input-create-project-close-date" />
           </div>
         </div>
         <div className="space-y-1">
           <label className="text-xs font-medium text-muted-foreground">Description</label>
-          <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} placeholder="Optional" data-testid="input-create-project-description" />
+          <Textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} placeholder="" data-testid="input-create-project-description" />
         </div>
         <div className="flex items-center gap-2 justify-end">
           <Button variant="ghost" size="sm" onClick={onCancel} data-testid="button-cancel-create-project">
