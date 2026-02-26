@@ -1,35 +1,3 @@
-/**
- * @file user-admin.tsx — User Administration Page
- *
- * @description
- * Admin-only page for managing user accounts and admin privileges.
- *
- * Key features:
- * - **Admin Accounts section**: lists all current admins with avatar, name,
- *   and email. Admins can be demoted to regular users via a two-click
- *   confirm flow, but only when there are more than 2 admins (minimum of 2
- *   admins is enforced to prevent lockout).
- * - **Promote to admin**: enter an email address to grant admin privileges
- *   to an existing user. If the user hasn't logged in yet, the server
- *   creates a pre-registered record that will be linked on first login.
- * - **User Management section**:
- *   - **Pre-registration**: add a user by email before they log in; the
- *     account is created in a pending state and linked automatically when
- *     the user authenticates for the first time.
- *   - **Remove user**: remove a user by email address.
- * - **CSV download**: exports the full user list (including admin status)
- *   as a CSV file via GET /api/admin/users/download.
- *
- * Access: restricted to "admin", "superadmin", or "superadministrator" roles.
- *
- * Data flow:
- * - GET    /api/admin/users           → { admins: User[] }
- * - POST   /api/admin/add             → promote user to admin by email
- * - DELETE /api/admin/remove/:userId  → demote admin to regular user
- * - POST   /api/admin/users           → pre-register a user by email
- * - DELETE /api/admin/users/by-email  → remove a user by email
- * - GET    /api/admin/users/download  → CSV blob of all users
- */
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -44,18 +12,10 @@ import { useAuth } from "@/hooks/use-auth";
 import { Plus, Loader2, ShieldAlert, Download, Users, Trash2 } from "lucide-react";
 import type { User } from "@shared/models/auth";
 
-/**
- * UserCard — displays a single admin user row with an optional demote button.
- * Uses a two-step confirmation pattern: first click shows "Confirm Demote",
- * second click executes the demotion. A "Cancel" button resets the state.
- */
 function UserCard({ user, onRemove, canRemove }: { user: User; onRemove?: () => void; canRemove: boolean }) {
-  // Two-phase confirmation state for the demote action
   const [confirming, setConfirming] = useState(false);
-  // Build initials from first/last name; fall back to "U" if both are empty
   const initials = `${(user.firstName || "")[0] || ""}${(user.lastName || "")[0] || ""}`.toUpperCase() || "U";
 
-  /** Toggle between "request confirmation" and "execute demotion" states */
   const handleRemoveClick = () => {
     if (confirming) {
       onRemove?.();
@@ -107,30 +67,21 @@ function UserCard({ user, onRemove, canRemove }: { user: User; onRemove?: () => 
   );
 }
 
-/**
- * UserAdminPage — top-level page component for user & admin management.
- * Two Card sections: Admin Accounts (promote/demote) and User Management
- * (pre-register/remove users + CSV export).
- */
 export default function UserAdminPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  // Input state for the three email fields
   const [adminEmail, setAdminEmail] = useState("");
   const [newUserEmail, setNewUserEmail] = useState("");
   const [removeUserEmail, setRemoveUserEmail] = useState("");
 
-  // Role-based access gate
   const currentUserRole = user?.role as string;
   const isCurrentAdmin = currentUserRole === "admin" || currentUserRole === "superadmin" || currentUserRole === "superadministrator";
 
-  // Fetch the list of current admin users
   const { data: adminData, isLoading: adminLoading } = useQuery<{ admins: User[] }>({
     queryKey: ["/api/admin/users"],
   });
 
-  // Mutation: promote a user to admin by email
   const addAdminMutation = useMutation({
     mutationFn: async (email: string) => {
       const res = await apiRequest("POST", "/api/admin/add", { email });
@@ -146,7 +97,6 @@ export default function UserAdminPage() {
     },
   });
 
-  // Mutation: demote an admin back to regular user by userId
   const removeAdminMutation = useMutation({
     mutationFn: async (userId: string) => {
       const res = await apiRequest("DELETE", `/api/admin/remove/${userId}`);
@@ -161,7 +111,6 @@ export default function UserAdminPage() {
     },
   });
 
-  // Mutation: pre-register a user by email (account linked on first login)
   const addUserMutation = useMutation({
     mutationFn: async (email: string) => {
       const res = await apiRequest("POST", "/api/admin/users", { email });
@@ -177,7 +126,6 @@ export default function UserAdminPage() {
     },
   });
 
-  // Mutation: remove a user by email address
   const removeUserMutation = useMutation({
     mutationFn: async (email: string) => {
       const res = await apiRequest("DELETE", "/api/admin/users/by-email", { email });
@@ -193,10 +141,6 @@ export default function UserAdminPage() {
     },
   });
 
-  /**
-   * Download a CSV of all users. Uses raw fetch (not apiRequest) because
-   * the response is a binary blob, not JSON.
-   */
   const handleDownloadUsers = async () => {
     try {
       const res = await fetch("/api/admin/users/download", { credentials: "include" });
@@ -251,7 +195,6 @@ export default function UserAdminPage() {
                   <UserCard
                     key={admin.id}
                     user={admin}
-                    /* Enforce minimum 2 admins: demote button only enabled when >2 exist */
                     canRemove={adminData.admins.length > 2}
                     onRemove={() => removeAdminMutation.mutate(admin.id)}
                   />

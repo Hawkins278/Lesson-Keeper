@@ -1,77 +1,17 @@
-/**
- * server/index.ts — Application entry point
- * 
- * Initializes the Express server with:
- *   1. JSON body parsing (with raw body preservation for webhook compatibility)
- *   2. URL-encoded form parsing
- *   3. API request logging (method, path, status, duration)
- *   4. Route registration (API endpoints + auth + object storage)
- *   5. Database seeding (reference values, impact levels, demo data on first run)
- *   6. Error handling middleware
- *   7. Static file serving (production) or Vite dev server (development)
- * 
- * Binds to port 5000 (or PORT env var) on 0.0.0.0 for external access.
- */
-
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 
-const startTime = Date.now();
-function crashLog(message: string) {
-  const uptime = ((Date.now() - startTime) / 1000).toFixed(1);
-  const ts = new Date().toISOString();
-  console.error(`[CRASH-MONITOR ${ts}] (uptime: ${uptime}s) ${message}`);
-}
-
-process.on("uncaughtException", (err) => {
-  crashLog(`UNCAUGHT EXCEPTION: ${err.message}\n${err.stack}`);
-  process.exit(1);
-});
-
-process.on("unhandledRejection", (reason, promise) => {
-  crashLog(`UNHANDLED REJECTION: ${reason}`);
-  if (reason instanceof Error) {
-    crashLog(`Stack: ${reason.stack}`);
-  }
-});
-
-process.on("SIGTERM", () => {
-  crashLog("Received SIGTERM signal");
-  process.exit(0);
-});
-
-process.on("SIGINT", () => {
-  crashLog("Received SIGINT signal");
-  process.exit(0);
-});
-
-process.on("SIGHUP", () => {
-  crashLog("Received SIGHUP signal");
-});
-
-process.on("exit", (code) => {
-  crashLog(`Process exiting with code: ${code}`);
-});
-
-process.on("warning", (warning) => {
-  crashLog(`Process warning: ${warning.name} - ${warning.message}`);
-});
-
-crashLog("Process starting up");
-
 const app = express();
 const httpServer = createServer(app);
 
-// Extend IncomingMessage to store raw body buffer (needed for webhook signature verification)
 declare module "http" {
   interface IncomingMessage {
     rawBody: unknown;
   }
 }
 
-// Parse JSON request bodies, preserving the raw buffer on the request object
 app.use(
   express.json({
     verify: (req, _res, buf) => {
@@ -80,10 +20,8 @@ app.use(
   }),
 );
 
-// Parse URL-encoded form data (non-extended mode uses querystring library)
 app.use(express.urlencoded({ extended: false }));
 
-// Timestamped logging utility for server-side diagnostic messages
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
     hour: "numeric",
@@ -95,21 +33,17 @@ export function log(message: string, source = "express") {
   console.log(`${formattedTime} [${source}] ${message}`);
 }
 
-// API request logger — captures response body and logs method, path, status, and duration
-// Only logs requests to /api/* paths to avoid noise from static file serving
 app.use((req, res, next) => {
   const start = Date.now();
   const path = req.path;
   let capturedJsonResponse: Record<string, any> | undefined = undefined;
 
-  // Intercept res.json() to capture response body for logging
   const originalResJson = res.json;
   res.json = function (bodyJson, ...args) {
     capturedJsonResponse = bodyJson;
     return originalResJson.apply(res, [bodyJson, ...args]);
   };
 
-  // Log after response is sent to client
   res.on("finish", () => {
     const duration = Date.now() - start;
     if (path.startsWith("/api")) {
@@ -125,16 +59,12 @@ app.use((req, res, next) => {
   next();
 });
 
-// Main startup sequence (async IIFE)
 (async () => {
-  // Register all API routes, authentication, and object storage endpoints
   await registerRoutes(httpServer, app);
 
-  // Seed database with default reference values, impact levels, and demo data (if empty)
   const { seedDatabase } = await import("./seed");
   await seedDatabase().catch((err) => console.error("Seed error:", err));
 
-  // Global error handler — catches unhandled errors from route handlers
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
@@ -148,8 +78,9 @@ app.use((req, res, next) => {
     return res.status(status).json({ message });
   });
 
-  // Setup frontend serving — Vite dev server in development, static files in production
-  // Must be registered after API routes to prevent the catch-all from intercepting API requests
+  // importantly only setup vite in development and after
+  // setting up all the other routes so the catch-all route
+  // doesn't interfere with the other routes
   if (process.env.NODE_ENV === "production") {
     serveStatic(app);
   } else {
@@ -157,7 +88,10 @@ app.use((req, res, next) => {
     await setupVite(httpServer, app);
   }
 
-  // Start HTTP server — port 5000 is the only non-firewalled port on Replit
+  // ALWAYS serve the app on the port specified in the environment variable PORT
+  // Other ports are firewalled. Default to 5000 if not specified.
+  // this serves both the API and the client.
+  // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || "5000", 10);
   httpServer.listen(
     {
@@ -167,13 +101,6 @@ app.use((req, res, next) => {
     },
     () => {
       log(`serving on port ${port}`);
-      crashLog("Server fully started and listening");
-
-      // Heartbeat every 60s for monitoring process health and memory usage
-      setInterval(() => {
-        const mem = process.memoryUsage();
-        crashLog(`HEARTBEAT - RSS: ${(mem.rss / 1024 / 1024).toFixed(1)}MB, Heap: ${(mem.heapUsed / 1024 / 1024).toFixed(1)}/${(mem.heapTotal / 1024 / 1024).toFixed(1)}MB`);
-      }, 60000);
     },
   );
 })();

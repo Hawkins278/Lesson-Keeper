@@ -1,38 +1,3 @@
-/**
- * @file admin.tsx — Reference Data Administration Page
- *
- * @description
- * Admin-only page for managing the four categories of reference data used
- * throughout the system:
- *   1. Project Types (e.g. "New Build", "Refurbishment")
- *   2. Project Phases (e.g. "Design", "Construction")
- *   3. Lesson Categories (top-level grouping for lessons)
- *   4. Lesson Subcategories (nested under a parent category)
- *
- * Key features:
- * - **Inline rename**: click the pencil icon to edit a value in-place;
- *   renaming propagates to all linked records (projects/lessons) because
- *   records reference the entry by ID, not by label text.
- * - **Dependency-aware delete**: each entry shows a usage count badge
- *   fetched from `/api/reference-data/usage`. Entries with usageCount > 0
- *   display a Lock icon and cannot be deleted; unused entries show an X
- *   button visible on hover.
- * - **Add new values**: each section has an input + button at the bottom.
- *   For Subcategories, a parent Category must also be selected.
- * - **Template download**: exports an XLSX template pre-populated with the
- *   current reference data for offline lesson entry.
- *
- * Access: restricted to users whose role is "admin", "superadmin", or
- * "superadministrator". Non-admins see a permission-denied message.
- *
- * Data flow:
- * - GET  /api/reference-data        → ReferenceData (all four lists)
- * - GET  /api/reference-data/usage   → UsageCounts per type per entry id
- * - POST /api/reference-data/:type   → create a new entry
- * - PATCH /api/reference-data/:type/:id → rename an entry
- * - DELETE /api/reference-data/:type/:id → remove an unused entry
- * - GET  /api/template               → download XLSX template blob
- */
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -48,14 +13,12 @@ import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/use-auth";
 import { Plus, X, Loader2, Shield, Download, Pencil, Check, Lock, Info } from "lucide-react";
 
-/** Shape of a single reference-data entry (shared across all four types) */
 interface RefEntry {
   id: number;
   value: string;
   categoryId?: number;
 }
 
-/** Aggregated response from GET /api/reference-data containing all four lists */
 interface ReferenceData {
   projectTypes: RefEntry[];
   projectPhases: RefEntry[];
@@ -63,13 +26,8 @@ interface ReferenceData {
   subcategories: (RefEntry & { categoryId: number })[];
 }
 
-/**
- * Usage counts keyed by reference type (e.g. "ProjectType") then by entry id.
- * Used to determine whether an entry can be safely deleted.
- */
 type UsageCounts = Record<string, Record<number, number>>;
 
-/** Human-readable section headings for each reference-data type */
 const FIELD_LABELS: Record<string, string> = {
   ProjectType: "Project Types",
   ProjectPhase: "Project Phases",
@@ -77,7 +35,6 @@ const FIELD_LABELS: Record<string, string> = {
   LessonSubcategory: "Lesson Subcategories",
 };
 
-/** Read-only system code prefixes displayed as badges (e.g. "PT-3", "CAT-1") */
 const SYSTEM_CODE_PREFIX: Record<string, string> = {
   ProjectType: "PT",
   ProjectPhase: "PH",
@@ -85,12 +42,6 @@ const SYSTEM_CODE_PREFIX: Record<string, string> = {
   LessonSubcategory: "SUB",
 };
 
-/**
- * Reusable section component rendered once per reference-data type.
- * Handles the list display, inline editing, dependency-checked deletion,
- * and the "add new" input row. For LessonSubcategory, an additional
- * Category dropdown is required before adding.
- */
 function ReferenceFieldSection({
   type,
   entries,
@@ -110,17 +61,13 @@ function ReferenceFieldSection({
   onRename: (id: number, newValue: string) => void;
   isAdding: boolean;
 }) {
-  // Local state for the "add new" input
   const [newValue, setNewValue] = useState("");
-  // Parent category selection — only used when type === "LessonSubcategory"
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>("");
-  // Inline-edit state: tracks which entry is being renamed and the draft text
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editValue, setEditValue] = useState("");
 
   const prefix = SYSTEM_CODE_PREFIX[type] || "REF";
 
-  /** Validate and submit new entry; subcategories also require a selected parent category */
   const handleAdd = () => {
     if (!newValue.trim()) return;
     if (type === "LessonSubcategory" && !selectedCategoryId) return;
@@ -151,7 +98,6 @@ function ReferenceFieldSection({
     setEditValue("");
   };
 
-  /** Resolve a categoryId to its display name for subcategory parenthetical labels */
   const getCategoryName = (catId?: number) => {
     if (!catId || !categories) return "";
     const cat = categories.find(c => c.id === catId);
@@ -293,31 +239,22 @@ function ReferenceFieldSection({
   );
 }
 
-/**
- * AdminPage — top-level page component for Reference Data administration.
- * Fetches all reference data and usage counts, then renders four
- * ReferenceFieldSection components separated by dividers.
- */
 export default function AdminPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Role-based access gate: only admin / superadmin / superadministrator
   const currentUserRole = user?.role as string;
   const isCurrentAdmin = currentUserRole === "admin" || currentUserRole === "superadmin" || currentUserRole === "superadministrator";
 
-  // Fetch all four reference-data lists in a single request
   const { data: refData, isLoading: refLoading } = useQuery<ReferenceData>({
     queryKey: ["/api/reference-data"],
   });
 
-  // Fetch per-type, per-entry usage counts for dependency checking
   const { data: usageData } = useQuery<UsageCounts>({
     queryKey: ["/api/reference-data/usage"],
   });
 
-  // Mutation: create a new reference-data entry
   const addMutation = useMutation({
     mutationFn: async ({ type, value, categoryId }: { type: string; value: string; categoryId?: number }) => {
       const res = await apiRequest("POST", `/api/reference-data/${type}`, { value, categoryId });
@@ -332,8 +269,6 @@ export default function AdminPage() {
     },
   });
 
-  // Mutation: rename an existing entry; also invalidates lessons/projects caches
-  // because those views may display the renamed label
   const renameMutation = useMutation({
     mutationFn: async ({ type, id, value }: { type: string; id: number; value: string }) => {
       const res = await apiRequest("PATCH", `/api/reference-data/${type}/${id}`, { value });
@@ -350,7 +285,6 @@ export default function AdminPage() {
     },
   });
 
-  // Mutation: delete an entry (server rejects if entry is in use)
   const removeMutation = useMutation({
     mutationFn: async ({ type, id }: { type: string; id: number }) => {
       const res = await apiRequest("DELETE", `/api/reference-data/${type}/${id}`);
@@ -365,10 +299,6 @@ export default function AdminPage() {
     },
   });
 
-  /**
-   * Download an XLSX template pre-populated with current reference data.
-   * Uses a raw fetch (not apiRequest) because the response is a binary blob.
-   */
   const handleDownloadTemplate = async () => {
     try {
       const res = await fetch("/api/template", { credentials: "include" });

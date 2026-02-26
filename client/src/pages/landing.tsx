@@ -1,29 +1,3 @@
-/**
- * @file landing.tsx — Public Landing Page
- *
- * @description
- * The entry point for unauthenticated visitors. Renders without requiring
- * any login session.
- *
- * Key features:
- * - **Top Issues panel**: fetches the top 3 highest-scored subcategories
- *   from the public endpoint GET /api/public/top-subcategories. Each entry
- *   shows the subcategory name, parent category, numeric score, and a
- *   colour-coded progress bar. The colour intensity scales with the score
- *   using the `getScoreColor` / `getScoreBarColor` helpers.
- * - **Score bar width**: `getScoreBarWidth` maps a score onto a 3–100%
- *   range against a notional max of 1500, providing a visual sense of
- *   relative severity.
- * - **Login buttons**: "Sign in with Replit" links to /api/login (the
- *   Replit OAuth flow). An SSO button is shown but disabled (future feature).
- * - **Branding**: header shows the LessonKeeper wordmark, hermit icon,
- *   and CITB logo. Footer shows the Hawkins-Digital logo and copyright.
- *
- * Access: fully public — no authentication required.
- *
- * Data flow:
- * - GET /api/public/top-subcategories → TopSubcategory[] (max 3 items)
- */
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -34,7 +8,6 @@ import hawkinsLogo from "@assets/Hawkins-Digital_1770883345237.jpg";
 import citbLogo from "@assets/citb_logo_1770915007635.png";
 import hermitIcon from "@assets/Zeppelin_hermit_1_1770990450114.png";
 
-/** Shape of a single top-scored subcategory returned by the public API */
 interface TopSubcategory {
   id: number;
   name: string;
@@ -42,7 +15,6 @@ interface TopSubcategory {
   effectiveScore: number;
 }
 
-/** Map a numeric score to a text colour class — higher scores get more vivid colour */
 function getScoreColor(score: number) {
   if (score >= 750) return "text-cbb";
   if (score >= 500) return "text-cbb/80";
@@ -50,7 +22,6 @@ function getScoreColor(score: number) {
   return "text-muted-foreground";
 }
 
-/** Map a numeric score to a progress-bar background colour class */
 function getScoreBarColor(score: number) {
   if (score >= 750) return "bg-cbb";
   if (score >= 500) return "bg-cbb/70";
@@ -58,17 +29,11 @@ function getScoreBarColor(score: number) {
   return "bg-cbb/30";
 }
 
-/** Convert score to a percentage width (3–100%) against a notional max of 1500 */
 function getScoreBarWidth(score: number) {
   return Math.min(100, Math.max(3, (score / 1500) * 100));
 }
 
-/**
- * LandingPage — public-facing page with top issues and login buttons.
- * No authentication required; the query to /api/public/* is open.
- */
 export default function LandingPage() {
-  // Fetch the top 3 highest-scored subcategories (public, no auth needed)
   const { data: topSubcategories = [], isLoading } = useQuery<TopSubcategory[]>({
     queryKey: ["/api/public/top-subcategories"],
   });

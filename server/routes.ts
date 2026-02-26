@@ -1,23 +1,3 @@
-/**
- * @file server/routes.ts
- * @description Express API route registration for LessonKeeper.
- *
- * This module registers all REST API endpoints on the Express application.
- * Routes are organized into the following groups:
- *
- *  - **Public endpoints** – Unauthenticated routes (e.g. top subcategories widget)
- *  - **Project CRUD** – List and update projects (admin-only updates)
- *  - **Lesson queries / exports** – List lessons, per-project lessons, and Excel exports
- *  - **Reference data management** – CRUD for ProjectType, ProjectPhase, LessonCategory, LessonSubcategory
- *  - **Impact level management** – CRUD for impact-level definitions and weighting
- *  - **Excel template generation** – Dynamic .xlsx template with dropdown validations
- *  - **Excel upload / parsing** – Parse uploaded .xlsx, validate, create projects & lessons
- *  - **Scoring configuration** – View / update / reset the subcategory scoring formula
- *  - **User profile management** – View and update the authenticated user's profile
- *  - **Admin user management** – List, add, remove admins; manage all users; CSV download
- */
-
-// ── Imports ────────────────────────────────────────────────────────────
 import type { Express, RequestHandler } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
@@ -28,27 +8,14 @@ import * as XLSX from "xlsx";
 import ExcelJS from "exceljs";
 import type { UserRole } from "@shared/models/auth";
 
-// Configure multer for in-memory file uploads (max 10 MB)
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
 
-// ── Admin helpers ──────────────────────────────────────────────────────
-
-/**
- * Checks whether a role string represents an admin-level role.
- * Recognized values (case-insensitive): "admin", "superadmin", "superadministrator".
- */
 function hasAdminRole(role: string | null | undefined): boolean {
   if (!role) return false;
   const normalized = role.toLowerCase().trim();
   return normalized === "admin" || normalized === "superadmin" || normalized === "superadministrator";
 }
 
-/**
- * Express middleware that enforces admin access.
- * Requires `isAuthenticated` to run first so that `req.user` is populated.
- * Looks up the database user record and verifies they hold an admin role.
- * On success, attaches the DB user object as `req.dbUser` for downstream handlers.
- */
 const isAdmin: RequestHandler = async (req: any, res, next) => {
   const userId = req.user?.claims?.sub;
   if (!userId) return res.status(401).json({ message: "Unauthorized" });
@@ -60,30 +27,20 @@ const isAdmin: RequestHandler = async (req: any, res, next) => {
   next();
 };
 
-/** Shape of a single validation error returned from the upload parser. */
 interface ValidationError {
   row: number;
   column: string;
   message: string;
 }
 
-// ── Route registration ─────────────────────────────────────────────────
-
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  // Initialize Replit-managed auth, auth routes, and object-storage routes
   await setupAuth(app);
   registerAuthRoutes(app);
   registerObjectStorageRoutes(app);
 
-  // ═══════════════════════════════════════════════════════════════════════
-  //  PROJECT CRUD
-  // ═══════════════════════════════════════════════════════════════════════
-
-  // GET /api/projects – Return all projects.
-  // Auth: isAuthenticated
   app.get("/api/projects", isAuthenticated, async (_req, res) => {
     try {
       const projects = await storage.getProjects();
@@ -94,42 +51,17 @@ export async function registerRoutes(
     }
   });
 
-  // POST /api/projects — Create a new project (admin only)
-  app.post("/api/projects", isAuthenticated, isAdmin, async (req: any, res) => {
-    try {
-      const { name, projectType, closeDate, projectManager, description, status } = req.body;
-      if (!name || !projectType) {
-        return res.status(400).json({ message: "Name and project type are required" });
-      }
-      const project = await storage.createProject({
-        name,
-        projectType,
-        closeDate: closeDate || null,
-        projectManager: projectManager || null,
-        description: description || null,
-        status: status || "Project to apply learning to",
-      });
-      res.json(project);
-    } catch (error) {
-      console.error("Error creating project:", error);
-      res.status(500).json({ message: "Failed to create project" });
-    }
-  });
-
-  // PATCH /api/projects/:id – Update an existing project's fields.
-  // Auth: isAuthenticated + isAdmin
   app.patch("/api/projects/:id", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
       if (isNaN(id)) return res.status(400).json({ message: "Invalid project ID" });
-      const { name, projectType, closeDate, projectManager, description, status } = req.body;
+      const { name, projectType, closeDate, projectManager, description } = req.body;
       const updateData: any = {};
       if (name !== undefined) updateData.name = name;
       if (projectType !== undefined) updateData.projectType = projectType;
       if (closeDate !== undefined) updateData.closeDate = closeDate;
       if (projectManager !== undefined) updateData.projectManager = projectManager;
       if (description !== undefined) updateData.description = description;
-      if (status !== undefined) updateData.status = status;
       const updated = await storage.updateProject(id, updateData);
       if (!updated) return res.status(404).json({ message: "Project not found" });
       res.json(updated);
@@ -139,13 +71,6 @@ export async function registerRoutes(
     }
   });
 
-  // ═══════════════════════════════════════════════════════════════════════
-  //  LESSON QUERIES & EXPORTS
-  // ═══════════════════════════════════════════════════════════════════════
-
-  // PATCH /api/lessons/:id – Update an existing lesson's fields.
-  // Auth: isAuthenticated + isAdmin
-  // Accepts optional body fields: name, eventDescription, keyLearningOrAction, phase, impactId.
   app.patch("/api/lessons/:id", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
@@ -166,8 +91,6 @@ export async function registerRoutes(
     }
   });
 
-  // GET /api/categories – Return all lesson categories.
-  // Auth: isAuthenticated
   app.get("/api/categories", isAuthenticated, async (_req, res) => {
     try {
       const categories = await storage.getCategories();
@@ -178,21 +101,12 @@ export async function registerRoutes(
     }
   });
 
-  // ═══════════════════════════════════════════════════════════════════════
-  //  PUBLIC ENDPOINTS (no authentication required)
-  // ═══════════════════════════════════════════════════════════════════════
-
-  // GET /api/public/top-subcategories – Return the top 3 trending subcategories.
-  // Auth: NONE (public endpoint for the landing page widget)
-  // Logic: Computes an "effective score" per subcategory by decaying currentScore
-  //        by the number of days since the last score update, then returns the top 3.
   app.get("/api/public/top-subcategories", async (_req, res) => {
     try {
       const subcategories = await storage.getSubcategories();
       const categories = await storage.getCategories();
       const catMap = new Map(categories.map(c => [c.id, c]));
       const now = new Date();
-      // Calculate effective score with time-decay and return top 3 by score
       const scored = subcategories
         .map(sub => {
           const lastUpdate = sub.lastScoreUpdatedAt ? new Date(sub.lastScoreUpdatedAt) : now;
@@ -210,8 +124,6 @@ export async function registerRoutes(
     }
   });
 
-  // GET /api/subcategories – Return all lesson subcategories.
-  // Auth: isAuthenticated
   app.get("/api/subcategories", isAuthenticated, async (_req, res) => {
     try {
       const subcategories = await storage.getSubcategories();
@@ -222,8 +134,6 @@ export async function registerRoutes(
     }
   });
 
-  // GET /api/projects/:id/lessons – Return all lessons for a specific project.
-  // Auth: isAuthenticated
   app.get("/api/projects/:id/lessons", isAuthenticated, async (req: any, res) => {
     try {
       const projectId = parseInt(req.params.id);
@@ -236,11 +146,6 @@ export async function registerRoutes(
     }
   });
 
-  // GET /api/projects/:id/lessons/export – Export a single project's lessons as an Excel file.
-  // Auth: isAuthenticated
-  // Builds a styled .xlsx workbook with:
-  //   1. A "PROJECT DETAILS" header section containing the project metadata
-  //   2. A "LESSONS" section listing all lessons sorted by impact weighting (descending)
   app.get("/api/projects/:id/lessons/export", isAuthenticated, async (req: any, res) => {
     try {
       const projectId = parseInt(req.params.id);
@@ -249,17 +154,14 @@ export async function registerRoutes(
       if (!project) return res.status(404).json({ message: "Project not found" });
       const projectLessons = await storage.getLessonsByProject(projectId);
 
-      // Create ExcelJS workbook and worksheet
       const wb = new ExcelJS.Workbook();
       const ws = wb.addWorksheet("Project Lessons");
 
-      // Define reusable cell styles for headers
       const headerFill: ExcelJS.Fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1F3864" } };
       const headerFont: Partial<ExcelJS.Font> = { bold: true, color: { argb: "FFFFFFFF" }, size: 11 };
       const colHeaderFill: ExcelJS.Fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFD6E4F0" } };
       const colHeaderFont: Partial<ExcelJS.Font> = { bold: true, size: 10 };
 
-      // ── Project details section ──
       ws.addRow(["PROJECT DETAILS"]);
       const projectHeaderRow = ws.getRow(1);
       projectHeaderRow.eachCell((cell) => { cell.fill = headerFill; cell.font = headerFont; });
@@ -279,7 +181,6 @@ export async function registerRoutes(
 
       ws.addRow([]);
 
-      // ── Lessons section ──
       ws.addRow(["LESSONS (Ordered by Impact Score)"]);
       const lessonsHeaderRow = ws.getRow(5);
       lessonsHeaderRow.eachCell((cell) => { cell.fill = headerFill; cell.font = headerFont; });
@@ -290,14 +191,12 @@ export async function registerRoutes(
       const colRow = ws.getRow(6);
       colRow.eachCell((cell) => { cell.fill = colHeaderFill; cell.font = colHeaderFont; });
 
-      // Sort lessons by impact weighting percentage descending
       const sorted = [...projectLessons].sort((a, b) => {
         const wA = a.impact?.weightingPercent ?? 0;
         const wB = b.impact?.weightingPercent ?? 0;
         return wB - wA;
       });
 
-      // Add one data row per lesson
       for (const lesson of sorted) {
         ws.addRow([
           lesson.id,
@@ -313,14 +212,12 @@ export async function registerRoutes(
         ]);
       }
 
-      // Set column widths for readability
       ws.columns = [
         { width: 6 }, { width: 22 }, { width: 18 }, { width: 22 },
         { width: 14 }, { width: 18 }, { width: 12 }, { width: 30 },
         { width: 40 }, { width: 40 },
       ];
 
-      // Write workbook buffer and send as downloadable .xlsx file
       const buf = await wb.xlsx.writeBuffer();
       const safeName = project.name.replace(/[^a-zA-Z0-9_-]/g, "_").substring(0, 50);
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
@@ -332,8 +229,6 @@ export async function registerRoutes(
     }
   });
 
-  // GET /api/lessons – Return all lessons across all projects.
-  // Auth: isAuthenticated
   app.get("/api/lessons", isAuthenticated, async (_req, res) => {
     try {
       const lessons = await storage.getLessons();
@@ -344,27 +239,9 @@ export async function registerRoutes(
     }
   });
 
-  // GET /api/lessons/export – Export dashboard lessons as a filtered Excel file.
-  // Auth: isAuthenticated
-  // Query params: projectType, phase, categoryId, subcategoryId, search, tab
-  // Logic:
-  //   1. Fetch all lessons and apply query-string filters
-  //   2. Group filtered lessons by subcategory, computing an effective score per group
-  //   3. Sort groups by descending effective score
-  //   4. Build a styled .xlsx with an "APPLIED FILTERS" summary and grouped lesson rows
   app.get("/api/lessons/export", isAuthenticated, async (req: any, res) => {
     try {
-      // ── Extract filter query parameters (support both single values and arrays) ──
-      const { search, tab } = req.query as Record<string, string | undefined>;
-      const toArray = (v: string | string[] | undefined): string[] => {
-        if (!v) return [];
-        return Array.isArray(v) ? v : [v];
-      };
-      const projectTypes = toArray(req.query.projectType);
-      const phases = toArray(req.query.phase);
-      const categoryIds = toArray(req.query.categoryId);
-      const subcategoryIds = toArray(req.query.subcategoryId);
-
+      const { projectType, phase, categoryId, subcategoryId, search, tab } = req.query as Record<string, string | undefined>;
       const allLessons = await storage.getLessons();
       const allSubcategories = await storage.getSubcategories();
       const allCategories = await storage.getCategories();
@@ -372,18 +249,18 @@ export async function registerRoutes(
       const dailyDecrement = scoringConfigData?.dailyDecrement ?? 1;
 
       let filtered = allLessons;
-      if (projectTypes.length > 0) filtered = filtered.filter(l => l.project && projectTypes.includes(l.project.projectType));
-      if (phases.length > 0) filtered = filtered.filter(l => phases.includes(l.phase));
-      if (categoryIds.length > 0) {
-        const catIdNums = categoryIds.map(Number);
+      if (projectType) filtered = filtered.filter(l => l.project?.projectType === projectType);
+      if (phase) filtered = filtered.filter(l => l.phase === phase);
+      if (categoryId) {
+        const catId = parseInt(categoryId);
         filtered = filtered.filter(l => {
           const sub = l.subcategory || allSubcategories.find(s => s.id === l.subcategoryId);
-          return sub && catIdNums.includes(sub.categoryId);
+          return sub && sub.categoryId === catId;
         });
       }
-      if (subcategoryIds.length > 0) {
-        const subIdNums = subcategoryIds.map(Number);
-        filtered = filtered.filter(l => subIdNums.includes(l.subcategoryId));
+      if (subcategoryId) {
+        const subId = parseInt(subcategoryId);
+        filtered = filtered.filter(l => l.subcategoryId === subId);
       }
       if (search) {
         const s = search.toLowerCase();
@@ -394,11 +271,9 @@ export async function registerRoutes(
         );
       }
 
-      // Filter by lesson type tab ("went-well" | "could-be-better" | all)
       if (tab === "could-be-better") filtered = filtered.filter(l => l.type === "CouldHaveGoneBetter");
       else if (tab === "went-well") filtered = filtered.filter(l => l.type === "WentWell");
 
-      // ── Group lessons by subcategory and compute effective scores ──
       const groups = new Map<number, { subcategory: any; category: any; lessons: typeof filtered; effectiveScore: number }>();
       for (const lesson of filtered) {
         const sub = lesson.subcategory || allSubcategories.find(s => s.id === lesson.subcategoryId);
@@ -413,14 +288,11 @@ export async function registerRoutes(
         }
         groups.get(sub.id)!.lessons.push(lesson);
       }
-      // Sort groups so highest-scored subcategories appear first
       const sortedGroups = Array.from(groups.values()).sort((a, b) => b.effectiveScore - a.effectiveScore);
 
-      // ── Build the Excel workbook ──
       const wb = new ExcelJS.Workbook();
       const ws = wb.addWorksheet("Dashboard Lessons");
 
-      // Reusable cell styles
       const headerFill: ExcelJS.Fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1F3864" } };
       const headerFont: Partial<ExcelJS.Font> = { bold: true, color: { argb: "FFFFFFFF" }, size: 11 };
       const colHeaderFill: ExcelJS.Fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFD6E4F0" } };
@@ -430,7 +302,6 @@ export async function registerRoutes(
 
       let rowIdx = 1;
 
-      // ── "Applied Filters" summary section ──
       ws.addRow(["APPLIED FILTERS"]);
       const filterHeaderRow = ws.getRow(rowIdx);
       filterHeaderRow.eachCell((cell) => { cell.fill = headerFill; cell.font = headerFont; });
@@ -439,15 +310,15 @@ export async function registerRoutes(
 
       const tabLabel = tab === "could-be-better" ? "Could Be Better" : tab === "went-well" ? "Went Well" : "All Lessons";
       const filterParts: string[] = [];
-      if (projectTypes.length > 0) filterParts.push(`Project Type: ${projectTypes.join(", ")}`);
-      if (phases.length > 0) filterParts.push(`Phase: ${phases.join(", ")}`);
-      if (categoryIds.length > 0) {
-        const names = categoryIds.map(id => allCategories.find(c => c.id === parseInt(id))?.name || id);
-        filterParts.push(`Category: ${names.join(", ")}`);
+      if (projectType) filterParts.push(`Project Type: ${projectType}`);
+      if (phase) filterParts.push(`Phase: ${phase}`);
+      if (categoryId) {
+        const cat = allCategories.find(c => c.id === parseInt(categoryId));
+        filterParts.push(`Category: ${cat?.name || categoryId}`);
       }
-      if (subcategoryIds.length > 0) {
-        const names = subcategoryIds.map(id => allSubcategories.find(s => s.id === parseInt(id))?.name || id);
-        filterParts.push(`Subcategory: ${names.join(", ")}`);
+      if (subcategoryId) {
+        const sub = allSubcategories.find(s => s.id === parseInt(subcategoryId));
+        filterParts.push(`Subcategory: ${sub?.name || subcategoryId}`);
       }
       if (search) filterParts.push(`Search: "${search}"`);
       const filterText = filterParts.length > 0
@@ -461,7 +332,6 @@ export async function registerRoutes(
       ws.addRow([]);
       rowIdx++;
 
-      // ── Lessons data section ──
       ws.addRow(["LESSONS (Ordered by Subcategory Score)"]);
       const lessonsHeaderRow = ws.getRow(rowIdx);
       lessonsHeaderRow.eachCell((cell) => { cell.fill = headerFill; cell.font = headerFont; });
@@ -474,7 +344,6 @@ export async function registerRoutes(
       colRow.eachCell((cell) => { cell.fill = colHeaderFill; cell.font = colHeaderFont; });
       rowIdx++;
 
-      // Emit one group-header row per subcategory, then its lesson rows
       for (const group of sortedGroups) {
         ws.addRow([`${group.category.name} > ${group.subcategory.name} (Score: ${group.effectiveScore})`]);
         const gRow = ws.getRow(rowIdx);
@@ -501,14 +370,12 @@ export async function registerRoutes(
         }
       }
 
-      // Set column widths
       ws.columns = [
         { width: 6 }, { width: 22 }, { width: 18 }, { width: 22 },
         { width: 10 }, { width: 14 }, { width: 18 }, { width: 12 },
         { width: 30 }, { width: 40 }, { width: 40 }, { width: 25 },
       ];
 
-      // Send workbook as downloadable attachment
       const buf = await wb.xlsx.writeBuffer();
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
       res.setHeader("Content-Disposition", `attachment; filename="dashboard_lessons_export.xlsx"`);
@@ -519,13 +386,6 @@ export async function registerRoutes(
     }
   });
 
-  // ═══════════════════════════════════════════════════════════════════════
-  //  REFERENCE DATA MANAGEMENT
-  // ═══════════════════════════════════════════════════════════════════════
-
-  // GET /api/reference-data – Return all reference data used in dropdown menus.
-  // Auth: isAuthenticated
-  // Returns: projectTypes, projectPhases, categories, subcategories, impactLevels
   app.get("/api/reference-data", isAuthenticated, async (_req, res) => {
     try {
       const allCategories = await storage.getCategories();
@@ -546,12 +406,6 @@ export async function registerRoutes(
     }
   });
 
-  // ═══════════════════════════════════════════════════════════════════════
-  //  IMPACT LEVEL MANAGEMENT
-  // ═══════════════════════════════════════════════════════════════════════
-
-  // GET /api/impact-levels – Return all impact level definitions.
-  // Auth: isAuthenticated
   app.get("/api/impact-levels", isAuthenticated, async (_req, res) => {
     try {
       const levels = await storage.getImpactLevels();
@@ -562,9 +416,6 @@ export async function registerRoutes(
     }
   });
 
-  // POST /api/impact-levels – Create a new impact level.
-  // Auth: isAuthenticated + isAdmin
-  // Body: { description: string, weightingPercent: number (>= 100), sortOrder?: number }
   app.post("/api/impact-levels", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
       const { description, weightingPercent, sortOrder } = req.body;
@@ -586,16 +437,12 @@ export async function registerRoutes(
     }
   });
 
-  // PATCH /api/impact-levels/:id – Update an existing impact level.
-  // Auth: isAuthenticated + isAdmin
-  // Prevents changing weightingPercent if lessons are already assigned to this level (409 Conflict).
   app.patch("/api/impact-levels/:id", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
       if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
       const { description, weightingPercent, sortOrder } = req.body;
 
-      // Guard: prevent weighting changes when lessons reference this impact level
       const usageCount = await storage.getImpactLevelUsageCount(id);
       if (usageCount > 0 && weightingPercent !== undefined) {
         const existing = await storage.getImpactLevel(id);
@@ -617,9 +464,6 @@ export async function registerRoutes(
     }
   });
 
-  // DELETE /api/impact-levels/:id – Delete an impact level.
-  // Auth: isAuthenticated + isAdmin
-  // Prevents deletion if lessons are assigned to it (409 Conflict).
   app.delete("/api/impact-levels/:id", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
@@ -636,15 +480,6 @@ export async function registerRoutes(
     }
   });
 
-  // ═══════════════════════════════════════════════════════════════════════
-  //  REFERENCE DATA CRUD (ProjectType, ProjectPhase, Category, Subcategory)
-  // ═══════════════════════════════════════════════════════════════════════
-
-  // POST /api/reference-data/:type – Create a new reference value.
-  // Auth: isAuthenticated + isAdmin
-  // :type is one of "ProjectType", "ProjectPhase", "LessonCategory", "LessonSubcategory".
-  // Routes to the appropriate storage method based on type.
-  // Duplicate names within the same type result in 409 Conflict.
   app.post("/api/reference-data/:type", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
       const { type } = req.params;
@@ -654,7 +489,6 @@ export async function registerRoutes(
       }
       const trimmed = value.trim();
 
-      // Route creation by reference-data type
       if (type === "ProjectType" || type === "ProjectPhase") {
         const existing = await storage.getReferenceValues(type);
         if (existing.some((v) => v.value.toLowerCase() === trimmed.toLowerCase())) {
@@ -670,7 +504,6 @@ export async function registerRoutes(
         const created = await storage.createCategory({ name: trimmed, description: null });
         return res.json({ id: created.id, value: created.name });
       } else if (type === "LessonSubcategory") {
-        // Subcategories require a parent categoryId in the request body
         const { categoryId } = req.body;
         if (!categoryId) {
           return res.status(400).json({ message: "Category is required for subcategories" });
@@ -689,9 +522,6 @@ export async function registerRoutes(
     }
   });
 
-  // PATCH /api/reference-data/:type/:id – Rename an existing reference value.
-  // Auth: isAuthenticated + isAdmin
-  // Checks for duplicate names before renaming (409 Conflict if duplicate found).
   app.patch("/api/reference-data/:type/:id", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
       const { type, id } = req.params;
@@ -703,7 +533,6 @@ export async function registerRoutes(
       const trimmed = value.trim();
 
       if (type === "ProjectType" || type === "ProjectPhase") {
-        // Check for duplicate names among other values of the same type
         const existing = await storage.getReferenceValues(type);
         if (existing.some((v) => v.id !== numId && v.value.toLowerCase() === trimmed.toLowerCase())) {
           return res.status(409).json({ message: `"${trimmed}" already exists` });
@@ -731,10 +560,6 @@ export async function registerRoutes(
     }
   });
 
-  // GET /api/reference-data/usage – Return usage counts for all reference data items.
-  // Auth: isAuthenticated + isAdmin
-  // Used by the admin UI to show how many records reference each value,
-  // preventing accidental deletion of values in active use.
   app.get("/api/reference-data/usage", isAuthenticated, isAdmin, async (_req: any, res) => {
     try {
       const ptValues = await storage.getReferenceValues("ProjectType");
@@ -743,7 +568,6 @@ export async function registerRoutes(
       const subcategories = await storage.getSubcategories();
       const impacts = await storage.getImpactLevels();
 
-      // Build a nested map: { typeName: { id: usageCount } }
       const usage: Record<string, Record<number, number>> = {
         ProjectType: {},
         ProjectPhase: {},
@@ -775,9 +599,6 @@ export async function registerRoutes(
     }
   });
 
-  // DELETE /api/reference-data/:type/:id – Delete a reference value by type.
-  // Auth: isAuthenticated + isAdmin
-  // Prevents deletion when dependent records exist (409 Conflict).
   app.delete("/api/reference-data/:type/:id", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
       const { type, id } = req.params;
@@ -810,25 +631,16 @@ export async function registerRoutes(
     }
   });
 
-  // ═══════════════════════════════════════════════════════════════════════
-  //  EXCEL TEMPLATE GENERATION
-  // ═══════════════════════════════════════════════════════════════════════
-
-  // GET /api/template – Generate and download an Excel upload template.
-  // Auth: isAuthenticated
-  // Builds a two-sheet workbook:
-  //   Sheet 1 ("Lessons Template"): Project details header + two lesson sections
-  //     ("COULD HAVE GONE BETTER" and "WENT WELL") with dropdown validations.
-  //   Sheet 2 ("Reference Data"): Lists of valid values for dropdowns
-  //     (ProjectType, ProjectPhase, LessonCategory, LessonSubcategory, Impact).
-  //   Dropdown validations on Sheet 1 reference named ranges on Sheet 2.
   app.get("/api/template", isAuthenticated, async (_req, res) => {
     try {
       const allCategories = await storage.getCategories();
       const allSubcategories = await storage.getSubcategories();
-      const allProjects = await storage.getProjects();
 
+      const ptValues = await storage.getReferenceValues("ProjectType");
       const phValues = await storage.getReferenceValues("ProjectPhase");
+      const projectTypes = ptValues.length > 0
+        ? ptValues.map((v) => v.value)
+        : ["IT Change", "Construction", "Business Change", "Infrastructure", "Software Development", "Organizational"];
       const phases = phValues.length > 0
         ? phValues.map((v) => v.value)
         : ["Initiation", "Planning", "Delivery", "Close-out"];
@@ -852,9 +664,6 @@ export async function registerRoutes(
       }
       const allSubcatNames = Object.values(subcatMap).flat();
 
-      // Build project ID+Name list for dropdown
-      const projectOptions = allProjects.map(p => `${p.projectCode} - ${p.name}`);
-
       const wb = new ExcelJS.Workbook();
 
       const sectionHeaderFill: ExcelJS.FillPattern = { type: "pattern", pattern: "solid", fgColor: { argb: "FF2B4C7E" } };
@@ -874,63 +683,54 @@ export async function registerRoutes(
         { width: 40 }, { width: 55 }, { width: 48 }, { width: 20 }, { width: 24 }, { width: 24 }, { width: 40 },
       ];
 
-      // Row 1: "PROJECT" section header
-      const r1 = ws.addRow(["PROJECT", "", "", "", "", "", ""]);
+      const r1 = ws.addRow(["PROJECT DETAILS", "", "", "", "", "", ""]);
       ws.mergeCells(r1.number, 1, r1.number, 7);
       r1.getCell(1).fill = sectionHeaderFill;
       r1.getCell(1).font = sectionHeaderFont;
       r1.height = 28;
 
-      // Row 2: Project column header — single dropdown for project selection
-      const r2 = ws.addRow(["Project (ID - Name)", "", "", "", "", "", ""]);
-      r2.getCell(1).fill = colHeaderFill;
-      r2.getCell(1).font = colHeaderFont;
-      r2.getCell(1).border = colHeaderBorder;
+      const r2 = ws.addRow(["ProjectType", "ProjectName", "ProjectCloseDate", "ProjectManager", "ProjectDescription", "", ""]);
+      r2.eachCell((cell) => { cell.fill = colHeaderFill; cell.font = colHeaderFont; cell.border = colHeaderBorder; });
 
-      // Row 3: Data entry row for project selection
       const dataRow = ws.addRow(["", "", "", "", "", "", ""]);
+      dataRow.getCell(3).numFmt = "@";
 
       ws.addRow([]);
 
-      // Row 5: "COULD HAVE GONE BETTER" section header
       const r5 = ws.addRow(["COULD HAVE GONE BETTER", "", "", "", "", "", ""]);
       ws.mergeCells(r5.number, 1, r5.number, 7);
       r5.getCell(1).fill = sectionHeaderFill;
       r5.getCell(1).font = sectionHeaderFont;
       r5.height = 28;
 
-      // Row 6: Lesson column headers
       const r6 = ws.addRow(["LessonName", "LessonEventDescription", "KeyLearningOrAction", "ProjectPhase", "LessonCategory", "LessonSubcategory", "Impact"]);
       r6.eachCell((cell) => { cell.fill = colHeaderFill; cell.font = colHeaderFont; cell.border = colHeaderBorder; });
 
       ws.addRow([]);
 
-      // "WENT WELL" section header
       const r10 = ws.addRow(["WENT WELL", "", "", "", "", "", ""]);
       ws.mergeCells(r10.number, 1, r10.number, 7);
       r10.getCell(1).fill = sectionHeaderFill;
       r10.getCell(1).font = sectionHeaderFont;
       r10.height = 28;
 
-      // Lesson column headers for "Went Well"
       const r11 = ws.addRow(["LessonName", "LessonEventDescription", "KeyLearningOrAction", "ProjectPhase", "LessonCategory", "LessonSubcategory", "Impact"]);
       r11.eachCell((cell) => { cell.fill = colHeaderFill; cell.font = colHeaderFont; cell.border = colHeaderBorder; });
 
-      // ── Sheet 2: Reference Data ──
       const refWs = wb.addWorksheet("Reference Data");
-      refWs.columns = [{ width: 44 }, { width: 22 }, { width: 28 }, { width: 28 }, { width: 44 }];
+      refWs.columns = [{ width: 28 }, { width: 22 }, { width: 28 }, { width: 28 }, { width: 44 }];
 
-      const refHeader = refWs.addRow(["Project (ID - Name)", "ProjectPhase", "LessonCategory", "LessonSubcategory", "Impact"]);
+      const refHeader = refWs.addRow(["ProjectType", "ProjectPhase", "LessonCategory", "LessonSubcategory", "Impact"]);
       refHeader.eachCell((cell) => { cell.fill = sectionHeaderFill; cell.font = sectionHeaderFont; });
       refHeader.height = 24;
 
-      const noteRow = refWs.addRow(["Available projects", "Add new values below", "Add new values below", "Add new values below", "Add new values below"]);
+      const noteRow = refWs.addRow(["Add new values below", "Add new values below", "Add new values below", "Add new values below", "Add new values below"]);
       noteRow.eachCell((cell) => { cell.fill = colHeaderFill; cell.font = { italic: true, size: 9, color: { argb: "FF555555" } }; });
 
-      const maxLen = Math.max(projectOptions.length, phases.length, categoryNames.length, allSubcatNames.length, impactNames.length);
+      const maxLen = Math.max(projectTypes.length, phases.length, categoryNames.length, allSubcatNames.length, impactNames.length);
       for (let i = 0; i < maxLen; i++) {
         refWs.addRow([
-          projectOptions[i] || "",
+          projectTypes[i] || "",
           phases[i] || "",
           categoryNames[i] || "",
           allSubcatNames[i] || "",
@@ -940,7 +740,7 @@ export async function registerRoutes(
 
       const refDataStart = 3;
       const refDataEnd = refDataStart + maxLen - 1;
-      const projRange = `'Reference Data'!$A$${refDataStart}:$A$${refDataEnd}`;
+      const ptRange = `'Reference Data'!$A$${refDataStart}:$A$${refDataEnd}`;
       const phRange = `'Reference Data'!$B$${refDataStart}:$B$${refDataEnd}`;
       const catRange = `'Reference Data'!$C$${refDataStart}:$C$${refDataEnd}`;
       const subRange = `'Reference Data'!$D$${refDataStart}:$D$${refDataEnd}`;
@@ -955,8 +755,7 @@ export async function registerRoutes(
         error: "Please select a value from the Reference Data list or add a new one to the Reference Data sheet.",
       });
 
-      // Apply Project dropdown to the project data row
-      ws.getCell("A3").dataValidation = dropdownValidation(projRange);
+      ws.getCell("A3").dataValidation = dropdownValidation(ptRange);
 
       const lessonDataRows = 50;
       for (let r = r6.number + 1; r <= r6.number + lessonDataRows; r++) {
@@ -983,35 +782,16 @@ export async function registerRoutes(
     }
   });
 
-  // ═══════════════════════════════════════════════════════════════════════
-  //  EXCEL UPLOAD & PARSING
-  // ═══════════════════════════════════════════════════════════════════════
-
-  // POST /api/upload – Parse an uploaded Excel file and create project + lessons.
-  // Auth: isAuthenticated
-  // Middleware: multer single-file upload ("file" field)
-  // Processing steps:
-  //   1. Read the uploaded .xlsx buffer with the XLSX library
-  //   2. Extract valid reference data from the "Reference Data" sheet (if present)
-  //   3. Parse project details from the "PROJECT DETAILS" section
-  //   4. Parse lessons from "COULD HAVE GONE BETTER" and "WENT WELL" sections
-  //   5. Validate all parsed data against reference data and required fields
-  //   6. If validation passes, create/find the project and create each lesson
-  //   7. Update subcategory scores using the scoring configuration
-  //   8. Return { success, lessonsCreated, projectsCreated, errors }
   app.post("/api/upload", isAuthenticated, upload.single("file"), async (req: any, res) => {
     try {
       if (!req.file) {
         return res.status(400).json({ message: "No file uploaded" });
       }
 
-      // ── Step 1: Read the Excel workbook ──
       const wb = XLSX.read(req.file.buffer, { type: "buffer" });
       const ws = wb.Sheets[wb.SheetNames[0]];
       const rawData: (string | number | null | undefined)[][] = XLSX.utils.sheet_to_json(ws, { header: 1 });
 
-      // ── Step 2: Extract reference data from the "Reference Data" sheet ──
-      // These sets are used to validate user-entered values in the main sheet
       const validProjectTypes = new Set<string>();
       const validPhases = new Set<string>();
       const validCategories = new Set<string>();
@@ -1020,7 +800,6 @@ export async function registerRoutes(
       const refSheet = wb.Sheets["Reference Data"];
       if (refSheet) {
         const refRows: (string | number | null | undefined)[][] = XLSX.utils.sheet_to_json(refSheet, { header: 1 });
-        // Skip rows 0 (header) and 1 (note row); data starts at row index 2
         for (let i = 2; i < refRows.length; i++) {
           const r = refRows[i];
           if (!r) continue;
@@ -1039,7 +818,6 @@ export async function registerRoutes(
 
       const errors: ValidationError[] = [];
 
-      // ── Utility: Convert Excel serial date number to "DD-Mon-YYYY" string ──
       const excelSerialToDate = (serial: number): string => {
         const epoch = new Date(1899, 11, 30);
         const d = new Date(epoch.getTime() + serial * 86400000);
@@ -1048,13 +826,11 @@ export async function registerRoutes(
         return `${day}-${months[d.getMonth()]}-${d.getFullYear()}`;
       };
 
-      // ── Utility: Safely extract a trimmed string from a cell ──
       const cellStr = (row: (string | number | null | undefined)[], col: number): string => {
         const v = row[col];
         return v != null ? String(v).trim() : "";
       };
 
-      // ── Utility: Extract a date string, handling Excel serial numbers ──
       const cellDateStr = (row: (string | number | null | undefined)[], col: number): string => {
         const v = row[col];
         if (v == null) return "";
@@ -1064,9 +840,6 @@ export async function registerRoutes(
         return String(v).trim();
       };
 
-      // ── Row-type detection helpers for the state-machine parser ──
-
-      // Detect section headers: "COULD HAVE GONE BETTER" or "WENT WELL"
       const isSectionHeader = (row: (string | number | null | undefined)[]): string | null => {
         const first = cellStr(row, 0).toUpperCase();
         if (first === "COULD HAVE GONE BETTER" || first === "COULD HAVE DONE BETTER") return "CouldHaveGoneBetter";
@@ -1075,8 +848,7 @@ export async function registerRoutes(
       };
 
       const isProjectDetailsHeader = (row: (string | number | null | undefined)[]): boolean => {
-        const upper = cellStr(row, 0).toUpperCase();
-        return upper === "PROJECT DETAILS" || upper === "PROJECT";
+        return cellStr(row, 0).toUpperCase() === "PROJECT DETAILS";
       };
 
       const isLessonHeaderRow = (row: (string | number | null | undefined)[]): boolean => {
@@ -1086,27 +858,23 @@ export async function registerRoutes(
 
       const isProjectHeaderRow = (row: (string | number | null | undefined)[]): boolean => {
         const first = cellStr(row, 0).toLowerCase();
-        return first === "projecttype" || first === "project type" || first.startsWith("project (id");
+        return first === "projecttype" || first === "project type";
       };
 
       const isEmpty = (row: (string | number | null | undefined)[]): boolean => {
         return !row || row.every((c) => c == null || String(c).trim() === "");
       };
 
-      // ── State-machine parser state ──
       let projectType = "";
       let projectName = "";
       let projectCloseDate = "";
       let projectManager = "";
       let projectDescription = "";
-      let projectCodeFromTemplate = "";
       let currentLessonType: "WentWell" | "CouldHaveGoneBetter" | null = null;
       let expectingLessonHeaders = false;
       let expectingProjectData = false;
       let projectDataFound = false;
-      let isNewTemplateFormat = false;
 
-      // Pre-load impact levels for mapping lesson impact strings to DB records
       const allImpactLevels = await storage.getImpactLevels();
       const impactMap = new Map(allImpactLevels.map(il => [il.description.toLowerCase(), il]));
 
@@ -1124,9 +892,6 @@ export async function registerRoutes(
 
       const parsedLessons: ParsedLesson[] = [];
 
-      // ── Step 3 & 4: Iterate rows using a state machine ──
-      // States: looking for PROJECT DETAILS → project header → project data →
-      //         section headers (COULD HAVE GONE BETTER / WENT WELL) → lesson rows
       for (let i = 0; i < rawData.length; i++) {
         const row = rawData[i];
         const rowNum = i + 1;
@@ -1136,57 +901,32 @@ export async function registerRoutes(
           continue;
         }
 
-        // Detect "PROJECT DETAILS" section header
         if (isProjectDetailsHeader(row)) {
           expectingProjectData = true;
           continue;
         }
 
-        // Skip the project column-header row and detect template format
         if (expectingProjectData && isProjectHeaderRow(row)) {
-          const headerText = cellStr(row, 0).toLowerCase();
-          if (headerText.startsWith("project (id")) {
-            isNewTemplateFormat = true;
-          }
           continue;
         }
 
-        // Parse the actual project data row
         if (expectingProjectData && !isProjectHeaderRow(row) && !isProjectDetailsHeader(row)) {
-          if (isNewTemplateFormat) {
-            // New format: single cell with "PRJ-001 - Project Name"
-            const projectSelection = cellStr(row, 0);
-            if (!projectSelection) {
-              errors.push({ row: rowNum, column: "Project", message: "Project selection is required. Select a project from the dropdown." });
-            } else {
-              const dashIndex = projectSelection.indexOf(" - ");
-              if (dashIndex > 0) {
-                projectCodeFromTemplate = projectSelection.substring(0, dashIndex).trim();
-                projectName = projectSelection.substring(dashIndex + 3).trim();
-              } else {
-                projectCodeFromTemplate = projectSelection.trim();
-              }
-            }
-          } else {
-            // Legacy format: separate columns for type, name, etc.
-            projectType = cellStr(row, 0);
-            projectName = cellStr(row, 1);
-            projectCloseDate = cellDateStr(row, 2);
-            projectManager = cellStr(row, 3);
-            projectDescription = cellStr(row, 4);
-
-            if (!projectType) errors.push({ row: rowNum, column: "ProjectType", message: "Project type is required" });
-            else if (hasRefData && validProjectTypes.size > 0 && !validProjectTypes.has(projectType)) {
-              errors.push({ row: rowNum, column: "ProjectType", message: `"${projectType}" is not in the Reference Data list. Add it to the Reference Data sheet or use an existing value.` });
-            }
-            if (!projectName) errors.push({ row: rowNum, column: "ProjectName", message: "Project name is required" });
-          }
+          projectType = cellStr(row, 0);
+          projectName = cellStr(row, 1);
+          projectCloseDate = cellDateStr(row, 2);
+          projectManager = cellStr(row, 3);
+          projectDescription = cellStr(row, 4);
           expectingProjectData = false;
           projectDataFound = true;
+
+          if (!projectType) errors.push({ row: rowNum, column: "ProjectType", message: "Project type is required" });
+          else if (hasRefData && validProjectTypes.size > 0 && !validProjectTypes.has(projectType)) {
+            errors.push({ row: rowNum, column: "ProjectType", message: `"${projectType}" is not in the Reference Data list. Add it to the Reference Data sheet or use an existing value.` });
+          }
+          if (!projectName) errors.push({ row: rowNum, column: "ProjectName", message: "Project name is required" });
           continue;
         }
 
-        // Detect lesson section headers ("COULD HAVE GONE BETTER" / "WENT WELL")
         const sectionType = isSectionHeader(row);
         if (sectionType) {
           currentLessonType = sectionType as "WentWell" | "CouldHaveGoneBetter";
@@ -1194,13 +934,11 @@ export async function registerRoutes(
           continue;
         }
 
-        // Skip the lesson column-header row within a section
         if (expectingLessonHeaders && isLessonHeaderRow(row)) {
           expectingLessonHeaders = false;
           continue;
         }
 
-        // ── Step 5: Parse and validate individual lesson rows ──
         if (currentLessonType && !expectingLessonHeaders) {
           const lessonName = cellStr(row, 0);
           const eventDescription = cellStr(row, 1);
@@ -1210,10 +948,8 @@ export async function registerRoutes(
           const subcategory = cellStr(row, 5);
           const impact = cellStr(row, 6);
 
-          // Skip fully blank lesson rows
           if (!lessonName && !eventDescription && !phase && !category && !subcategory) continue;
 
-          // Validate required lesson fields
           if (!lessonName) errors.push({ row: rowNum, column: "LessonName", message: "Lesson name is required" });
           if (!phase) errors.push({ row: rowNum, column: "ProjectPhase", message: "Project phase is required" });
           else if (hasRefData && validPhases.size > 0 && !validPhases.has(phase)) {
@@ -1245,7 +981,6 @@ export async function registerRoutes(
         }
       }
 
-      // Ensure project details were found in the spreadsheet
       if (!projectDataFound) {
         errors.push({ row: 1, column: "ProjectDetails", message: "No project details found. Ensure the sheet has a PROJECT DETAILS section." });
       }
@@ -1254,48 +989,33 @@ export async function registerRoutes(
         errors.push({ row: 1, column: "Lessons", message: "No lessons found. Add lessons under COULD HAVE GONE BETTER and/or WENT WELL sections." });
       }
 
-      // If any validation errors were collected, return them without persisting data
       if (errors.length > 0) {
         return res.json({ success: false, lessonsCreated: 0, projectsCreated: 0, errors });
       }
 
-      // ── Step 6: Persist project and lessons ──
       let lessonsCreated = 0;
       let projectsCreated = 0;
       const userId = req.user?.claims?.sub;
       const scoringCfg = await storage.getScoringConfig();
 
-      // Find existing project (by code for new template, or by name+type for legacy)
-      let project;
-      if (isNewTemplateFormat && projectCodeFromTemplate) {
-        project = await storage.findProjectByCode(projectCodeFromTemplate);
-        if (!project) {
-          errors.push({ row: 1, column: "Project", message: `Project "${projectCodeFromTemplate}" not found. Create the project first before uploading lessons.` });
-          return res.json({ success: false, lessonsCreated: 0, projectsCreated: 0, errors });
-        }
-      } else {
-        project = await storage.findProjectByNameAndType(projectName, projectType);
-        if (!project) {
-          project = await storage.createProject({
-            projectType,
-            name: projectName,
-            closeDate: projectCloseDate || null,
-            projectManager: projectManager || null,
-            description: projectDescription || null,
-          });
-          projectsCreated++;
-        }
+      let project = await storage.findProjectByNameAndType(projectName, projectType);
+      if (!project) {
+        project = await storage.createProject({
+          projectType,
+          name: projectName,
+          closeDate: projectCloseDate || null,
+          projectManager: projectManager || null,
+          description: projectDescription || null,
+        });
+        projectsCreated++;
       }
 
-      // Create each parsed lesson and update subcategory scores
       for (const lesson of parsedLessons) {
-        // Find or create the category
         let category = await storage.findCategoryByName(lesson.category);
         if (!category) {
           category = await storage.createCategory({ name: lesson.category, description: null });
         }
 
-        // Find or create the subcategory within that category
         let subcategory = await storage.findSubcategoryByNameAndCategory(lesson.subcategory, category.id);
         if (!subcategory) {
           subcategory = await storage.createSubcategory({
@@ -1305,21 +1025,17 @@ export async function registerRoutes(
           });
         }
 
-        // Resolve the impact level and compute the weighting multiplier
         const matchedImpact = lesson.impact ? impactMap.get(lesson.impact.toLowerCase()) : undefined;
         const impactId = matchedImpact ? matchedImpact.id : null;
         const weightingMultiplier = matchedImpact ? matchedImpact.weightingPercent / 100 : 1;
 
-        // ── Step 7: Update subcategory score using decay + increment formula ──
         {
           const now = new Date();
           if (!subcategory.firstRecordedDate) {
-            // First lesson ever for this subcategory: set initial score
             await storage.createSubcategoryFirstRecorded(subcategory.id, now);
             const initialScore = Math.round(scoringCfg.initialScore * weightingMultiplier);
             await storage.updateSubcategoryScore(subcategory.id, initialScore, now);
           } else {
-            // Apply time-decay to existing score, then add the increment
             const lastUpdate = subcategory.lastScoreUpdatedAt ? new Date(subcategory.lastScoreUpdatedAt) : now;
             const daysSince = Math.max(0, Math.floor((now.getTime() - lastUpdate.getTime()) / (1000 * 60 * 60 * 24)));
             const decayed = Math.max(0, (subcategory.currentScore || 0) - daysSince * scoringCfg.dailyDecrement);
@@ -1327,11 +1043,9 @@ export async function registerRoutes(
             const newScore = decayed + increment;
             await storage.updateSubcategoryScore(subcategory.id, newScore, now);
           }
-          // Reload subcategory to get updated score values
           subcategory = (await storage.findSubcategoryByNameAndCategory(lesson.subcategory, category.id))!;
         }
 
-        // Create the lesson record in the database
         await storage.createLesson({
           projectId: project.id,
           subcategoryId: subcategory.id,
@@ -1346,11 +1060,6 @@ export async function registerRoutes(
         lessonsCreated++;
       }
 
-      // Auto-update project status when lessons are loaded
-      if (lessonsCreated > 0 && project.status === "Project to apply learning to") {
-        await storage.updateProjectStatus(project.id, "Live project with learning captured and learning still to be applied");
-      }
-
       res.json({ success: true, lessonsCreated, projectsCreated, errors: [] });
     } catch (error) {
       console.error("Upload error:", error);
@@ -1358,12 +1067,6 @@ export async function registerRoutes(
     }
   });
 
-  // ═══════════════════════════════════════════════════════════════════════
-  //  SCORING CONFIGURATION
-  // ═══════════════════════════════════════════════════════════════════════
-
-  // GET /api/scoring-config – Return the current scoring formula parameters.
-  // Auth: isAuthenticated
   app.get("/api/scoring-config", isAuthenticated, async (_req, res) => {
     try {
       const config = await storage.getScoringConfig();
@@ -1374,10 +1077,6 @@ export async function registerRoutes(
     }
   });
 
-  // PATCH /api/scoring-config – Update the scoring formula parameters.
-  // Auth: isAuthenticated + isAdmin
-  // Body: { initialScore: number, incrementScore: number, dailyDecrement: number }
-  // After updating, recalculates all subcategory scores with the new config.
   app.patch("/api/scoring-config", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
       const { initialScore, incrementScore, dailyDecrement } = req.body;
@@ -1388,7 +1087,6 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Scoring values must be non-negative" });
       }
       const updated = await storage.updateScoringConfig({ initialScore, incrementScore, dailyDecrement });
-      // Recalculate all existing subcategory scores to reflect the new formula
       await storage.recalculateAllScores({ initialScore, incrementScore, dailyDecrement });
       res.json(updated);
     } catch (error) {
@@ -1397,9 +1095,6 @@ export async function registerRoutes(
     }
   });
 
-  // POST /api/scoring-config/reset – Reset scoring configuration to application defaults.
-  // Auth: isAuthenticated + isAdmin
-  // Imports SCORING_DEFAULTS from shared schema and applies them.
   app.post("/api/scoring-config/reset", isAuthenticated, isAdmin, async (_req, res) => {
     try {
       const { SCORING_DEFAULTS } = await import("@shared/schema");
@@ -1420,15 +1115,8 @@ export async function registerRoutes(
     }
   });
 
-  // ═══════════════════════════════════════════════════════════════════════
-  //  USER PROFILE MANAGEMENT
-  // ═══════════════════════════════════════════════════════════════════════
-
-  // Initialize the Object Storage service for profile image ACL management
   const objectStorageService = new ObjectStorageService();
 
-  // GET /api/user/profile – Return the authenticated user's profile.
-  // Auth: isAuthenticated
   app.get("/api/user/profile", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user?.claims?.sub;
@@ -1442,11 +1130,6 @@ export async function registerRoutes(
     }
   });
 
-  // PATCH /api/user/profile – Update the authenticated user's profile.
-  // Auth: isAuthenticated
-  // Accepts optional body fields: firstName, lastName, profileImageUrl.
-  // When profileImageUrl is provided, normalizes the path and sets a public ACL
-  // on the object-storage asset so it can be displayed in the UI.
   app.patch("/api/user/profile", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user?.claims?.sub;
@@ -1457,7 +1140,6 @@ export async function registerRoutes(
       if (lastName !== undefined) updateData.lastName = lastName;
       if (profileImageUrl !== undefined) {
         if (profileImageUrl) {
-          // Normalize the object-storage path and set it as publicly visible
           const normalizedPath = objectStorageService.normalizeObjectEntityPath(profileImageUrl);
           await objectStorageService.trySetObjectEntityAclPolicy(normalizedPath, {
             owner: userId,
@@ -1477,12 +1159,6 @@ export async function registerRoutes(
     }
   });
 
-  // ═══════════════════════════════════════════════════════════════════════
-  //  ADMIN USER MANAGEMENT
-  // ═══════════════════════════════════════════════════════════════════════
-
-  // GET /api/admin/users – Return all users with admin role.
-  // Auth: isAuthenticated + isAdmin
   app.get("/api/admin/users", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
       const admins = await storage.getUsersByRole("admin");
@@ -1493,9 +1169,6 @@ export async function registerRoutes(
     }
   });
 
-  // POST /api/admin/add – Promote an existing user to admin by email.
-  // Auth: isAuthenticated + isAdmin
-  // The target user must have logged in at least once (must exist in the users table).
   app.post("/api/admin/add", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
       const { email } = req.body;
@@ -1516,9 +1189,6 @@ export async function registerRoutes(
     }
   });
 
-  // DELETE /api/admin/remove/:userId – Demote an admin back to regular user.
-  // Auth: isAuthenticated + isAdmin
-  // Enforces a minimum of 2 admins to prevent accidental lockout.
   app.delete("/api/admin/remove/:userId", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
       const { userId } = req.params;
@@ -1527,7 +1197,6 @@ export async function registerRoutes(
         return res.status(404).json({ message: "Admin not found" });
       }
 
-      // Safety check: always keep at least 2 admins
       const adminCount = await storage.countUsersByRole("admin");
       if (adminCount <= 2) {
         return res.status(400).json({ message: "Cannot remove admin. There must always be at least 2 admins." });
@@ -1541,8 +1210,6 @@ export async function registerRoutes(
     }
   });
 
-  // GET /api/admin/all-users – Return all users in the system.
-  // Auth: isAuthenticated + isAdmin
   app.get("/api/admin/all-users", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
       const allUsers = await storage.getAllUsers();
@@ -1553,9 +1220,6 @@ export async function registerRoutes(
     }
   });
 
-  // POST /api/admin/users – Create a new user by email (admin pre-registration).
-  // Auth: isAuthenticated + isAdmin
-  // Used to pre-create user accounts before they log in for the first time.
   app.post("/api/admin/users", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
       const { email } = req.body;
@@ -1575,9 +1239,6 @@ export async function registerRoutes(
     }
   });
 
-  // DELETE /api/admin/users/by-email – Remove a non-admin user by email.
-  // Auth: isAuthenticated + isAdmin
-  // Guards: Cannot remove admin users (must demote first) or the current user.
   app.delete("/api/admin/users/by-email", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
       const { email } = req.body;
@@ -1588,11 +1249,9 @@ export async function registerRoutes(
       if (!targetUser) {
         return res.status(404).json({ message: "No user found with that email" });
       }
-      // Prevent deleting admin accounts (they must be demoted first)
       if (hasAdminRole(targetUser.role)) {
         return res.status(400).json({ message: "Cannot remove an admin user. Demote them first from Admin Accounts." });
       }
-      // Prevent self-deletion
       const currentSub = req.user?.claims?.sub;
       if (currentSub && targetUser.id === currentSub) {
         return res.status(400).json({ message: "Cannot remove your own account" });
@@ -1605,9 +1264,6 @@ export async function registerRoutes(
     }
   });
 
-  // GET /api/admin/users/download – Download all users as a CSV file.
-  // Auth: isAuthenticated + isAdmin
-  // Generates CSV with columns: UserID, Email, FirstName, LastName, Role, IsAdmin, CreatedAt
   app.get("/api/admin/users/download", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
       const allUsers = await storage.getAllUsers();
@@ -1631,65 +1287,6 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error downloading users:", error);
       res.status(500).json({ message: "Failed to download users" });
-    }
-  });
-
-  // ═══════════════════════════════════════════════════════════════════════
-  //  LEARNING APPLICATION ROUTES
-  // ═══════════════════════════════════════════════════════════════════════
-
-  // GET /api/learning-applications — Get all learning applications with details
-  app.get("/api/learning-applications", isAuthenticated, async (req: any, res) => {
-    try {
-      const projectId = req.query.projectId ? parseInt(req.query.projectId) : undefined;
-      const apps = await storage.getLearningApplicationsWithDetails(projectId);
-      res.json(apps);
-    } catch (error) {
-      console.error("Error fetching learning applications:", error);
-      res.status(500).json({ message: "Failed to fetch learning applications" });
-    }
-  });
-
-  // POST /api/learning-applications — Apply lesson subcategories to a project
-  app.post("/api/learning-applications", isAuthenticated, async (req: any, res) => {
-    try {
-      const { projectId, subcategoryIds } = req.body;
-      if (!projectId || !subcategoryIds || !Array.isArray(subcategoryIds)) {
-        return res.status(400).json({ message: "projectId and subcategoryIds array are required" });
-      }
-      const userId = req.user?.claims?.sub;
-      const existing = await storage.getLearningApplications(projectId);
-      const existingSubIds = new Set(existing.map(a => a.subcategoryId));
-      const created = [];
-      for (const subcategoryId of subcategoryIds) {
-        const subId = parseInt(subcategoryId);
-        if (isNaN(subId)) continue;
-        if (existingSubIds.has(subId)) continue;
-        const app = await storage.createLearningApplication({
-          projectId: parseInt(projectId),
-          subcategoryId: subId,
-          appliedByUserId: userId || null,
-        });
-        created.push(app);
-        existingSubIds.add(subId);
-      }
-      res.json({ created: created.length, applications: created });
-    } catch (error) {
-      console.error("Error creating learning applications:", error);
-      res.status(500).json({ message: "Failed to create learning applications" });
-    }
-  });
-
-  // DELETE /api/learning-applications/:id — Remove a learning application
-  app.delete("/api/learning-applications/:id", isAuthenticated, async (req: any, res) => {
-    try {
-      const id = parseInt(req.params.id);
-      if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
-      await storage.deleteLearningApplication(id);
-      res.json({ message: "Learning application removed" });
-    } catch (error) {
-      console.error("Error deleting learning application:", error);
-      res.status(500).json({ message: "Failed to delete learning application" });
     }
   });
 

@@ -1,32 +1,3 @@
-/**
- * @file settings.tsx — User Settings Page
- *
- * @description
- * Available to all authenticated users. Allows viewing and editing of
- * personal profile information.
- *
- * Key features:
- * - **Avatar upload via object storage**: uses a two-step presigned-URL flow:
- *   1. POST /api/uploads/request-url with file metadata → receives an
- *      `uploadURL` (presigned PUT URL) and `objectPath`.
- *   2. PUT the raw file bytes to `uploadURL` (direct-to-storage upload).
- *   3. PATCH /api/user/profile with the `uploadURL` as the new
- *      `profileImageUrl` so the server records the avatar location.
- *   File validation: max 5 MB, must be an image/* MIME type.
- * - **Profile editing**: first name and last name can be changed and saved.
- *   Email is read-only (managed by the login provider). Role is displayed
- *   as a badge but cannot be changed by the user.
- * - **One-time initialization**: local form state is populated from the
- *   server profile query on first load to avoid overwriting user edits
- *   on re-renders.
- *
- * Access: any authenticated user.
- *
- * Data flow:
- * - GET   /api/user/profile         → User object
- * - PATCH /api/user/profile         → update firstName / lastName / profileImageUrl
- * - POST  /api/uploads/request-url  → presigned upload URL for object storage
- */
 import { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -41,35 +12,25 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Camera, Save, Loader2 } from "lucide-react";
 
-/**
- * SettingsPage — profile editing page with avatar upload and name fields.
- */
 export default function SettingsPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  // Ref to the hidden file input so avatar click/button can trigger it
   const fileInputRef = useRef<HTMLInputElement>(null);
-  // Local form state for editable profile fields
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
-  // Tracks the presigned-URL upload lifecycle
   const [isUploading, setIsUploading] = useState(false);
-  // Guards against re-initializing form fields on subsequent renders
   const [initialized, setInitialized] = useState(false);
 
-  // Fetch the authenticated user's profile
   const { data: user, isLoading } = useQuery<User>({
     queryKey: ["/api/user/profile"],
   });
 
-  // One-time initialization: copy server values into local state
   if (user && !initialized) {
     setFirstName(user.firstName || "");
     setLastName(user.lastName || "");
     setInitialized(true);
   }
 
-  // Mutation: update profile fields (name and/or avatar URL)
   const updateProfileMutation = useMutation({
     mutationFn: async (data: { firstName?: string; lastName?: string; profileImageUrl?: string }) => {
       const res = await apiRequest("PATCH", "/api/user/profile", data);
@@ -89,18 +50,10 @@ export default function SettingsPage() {
     updateProfileMutation.mutate({ firstName, lastName });
   };
 
-  /**
-   * Avatar upload handler — presigned URL flow:
-   * 1. Validate file (size ≤ 5MB, image/* type)
-   * 2. Request a presigned PUT URL from the server
-   * 3. Upload the file directly to object storage via the presigned URL
-   * 4. Save the URL as the user's profileImageUrl
-   */
   const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // 5 MB limit enforced client-side
     const maxSize = 5 * 1024 * 1024;
     if (file.size > maxSize) {
       toast({ title: "File too large", description: "Please choose an image under 5MB.", variant: "destructive" });
@@ -114,7 +67,6 @@ export default function SettingsPage() {
 
     setIsUploading(true);
     try {
-      // Step 1: request a presigned upload URL from the server
       const urlRes = await fetch("/api/uploads/request-url", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -127,10 +79,8 @@ export default function SettingsPage() {
       });
 
       if (!urlRes.ok) throw new Error("Failed to get upload URL");
-      // Destructure the presigned URL and the canonical object path
       const { uploadURL, objectPath } = await urlRes.json();
 
-      // Step 2: PUT the raw file bytes directly to object storage
       const uploadRes = await fetch(uploadURL, {
         method: "PUT",
         body: file,
@@ -139,7 +89,6 @@ export default function SettingsPage() {
 
       if (!uploadRes.ok) throw new Error("Failed to upload file");
 
-      // Step 3: persist the presigned URL as the user's avatar
       updateProfileMutation.mutate({ profileImageUrl: uploadURL });
     } catch (error) {
       toast({ title: "Upload failed", description: "Could not upload avatar. Please try again.", variant: "destructive" });
@@ -158,12 +107,10 @@ export default function SettingsPage() {
     );
   }
 
-  // Build avatar fallback initials from first+last name, defaulting to "U"
   const initials = user
     ? `${(user.firstName || "")[0] || ""}${(user.lastName || "")[0] || ""}`.toUpperCase() || "U"
     : "U";
 
-  // Derive a display-friendly role label for the badge
   const roleLabel = user?.role === "admin" || user?.role === "superadmin" || user?.role === "superadministrator" ? "Admin" : "User";
 
   return (
