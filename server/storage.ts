@@ -17,6 +17,7 @@ export interface IStorage {
   getProjects(): Promise<Project[]>;
   getProject(id: number): Promise<Project | undefined>;
   findProjectByNameAndType(name: string, projectType: string): Promise<Project | undefined>;
+  findProjectByCode(code: string): Promise<Project | undefined>;
   generateProjectCode(): Promise<string>;
   createProject(project: InsertProject): Promise<Project>;
   updateProject(id: number, data: Partial<InsertProject & { status: string }>): Promise<Project | undefined>;
@@ -89,6 +90,12 @@ export class DatabaseStorage implements IStorage {
   async findProjectByNameAndType(name: string, projectType: string): Promise<Project | undefined> {
     const [project] = await db.select().from(projects)
       .where(and(eq(projects.name, name), eq(projects.projectType, projectType)));
+    return project;
+  }
+
+  async findProjectByCode(code: string): Promise<Project | undefined> {
+    const [project] = await db.select().from(projects)
+      .where(eq(projects.projectCode, code));
     return project;
   }
 

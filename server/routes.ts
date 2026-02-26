@@ -681,12 +681,9 @@ export async function registerRoutes(
     try {
       const allCategories = await storage.getCategories();
       const allSubcategories = await storage.getSubcategories();
+      const allProjects = await storage.getProjects();
 
-      const ptValues = await storage.getReferenceValues("ProjectType");
       const phValues = await storage.getReferenceValues("ProjectPhase");
-      const projectTypes = ptValues.length > 0
-        ? ptValues.map((v) => v.value)
-        : ["IT Change", "Construction", "Business Change", "Infrastructure", "Software Development", "Organizational"];
       const phases = phValues.length > 0
         ? phValues.map((v) => v.value)
         : ["Initiation", "Planning", "Delivery", "Close-out"];
@@ -710,6 +707,8 @@ export async function registerRoutes(
       }
       const allSubcatNames = Object.values(subcatMap).flat();
 
+      const projectPairs = allProjects.map((p: any) => `${p.name} | ${p.projectCode || "PRJ-???"}`);
+
       const wb = new ExcelJS.Workbook();
 
       const sectionHeaderFill: ExcelJS.FillPattern = { type: "pattern", pattern: "solid", fgColor: { argb: "FF2B4C7E" } };
@@ -729,17 +728,18 @@ export async function registerRoutes(
         { width: 40 }, { width: 55 }, { width: 48 }, { width: 20 }, { width: 24 }, { width: 24 }, { width: 40 },
       ];
 
-      const r1 = ws.addRow(["PROJECT DETAILS", "", "", "", "", "", ""]);
+      const r1 = ws.addRow(["PROJECT", "", "", "", "", "", ""]);
       ws.mergeCells(r1.number, 1, r1.number, 7);
       r1.getCell(1).fill = sectionHeaderFill;
       r1.getCell(1).font = sectionHeaderFont;
       r1.height = 28;
 
-      const r2 = ws.addRow(["ProjectType", "ProjectName", "ProjectCloseDate", "ProjectManager", "ProjectDescription", "", ""]);
-      r2.eachCell((cell) => { cell.fill = colHeaderFill; cell.font = colHeaderFont; cell.border = colHeaderBorder; });
+      const r2 = ws.addRow(["Select Project (Name | ID)", "", "", "", "", "", ""]);
+      r2.getCell(1).fill = colHeaderFill;
+      r2.getCell(1).font = colHeaderFont;
+      r2.getCell(1).border = colHeaderBorder;
 
       const dataRow = ws.addRow(["", "", "", "", "", "", ""]);
-      dataRow.getCell(3).numFmt = "@";
 
       ws.addRow([]);
 
@@ -764,19 +764,19 @@ export async function registerRoutes(
       r11.eachCell((cell) => { cell.fill = colHeaderFill; cell.font = colHeaderFont; cell.border = colHeaderBorder; });
 
       const refWs = wb.addWorksheet("Reference Data");
-      refWs.columns = [{ width: 28 }, { width: 22 }, { width: 28 }, { width: 28 }, { width: 44 }];
+      refWs.columns = [{ width: 44 }, { width: 22 }, { width: 28 }, { width: 28 }, { width: 44 }];
 
-      const refHeader = refWs.addRow(["ProjectType", "ProjectPhase", "LessonCategory", "LessonSubcategory", "Impact"]);
+      const refHeader = refWs.addRow(["Projects (Name | ID)", "ProjectPhase", "LessonCategory", "LessonSubcategory", "Impact"]);
       refHeader.eachCell((cell) => { cell.fill = sectionHeaderFill; cell.font = sectionHeaderFont; });
       refHeader.height = 24;
 
-      const noteRow = refWs.addRow(["Add new values below", "Add new values below", "Add new values below", "Add new values below", "Add new values below"]);
+      const noteRow = refWs.addRow(["Auto-updated from system", "Add new values below", "Add new values below", "Add new values below", "Add new values below"]);
       noteRow.eachCell((cell) => { cell.fill = colHeaderFill; cell.font = { italic: true, size: 9, color: { argb: "FF555555" } }; });
 
-      const maxLen = Math.max(projectTypes.length, phases.length, categoryNames.length, allSubcatNames.length, impactNames.length);
+      const maxLen = Math.max(projectPairs.length, phases.length, categoryNames.length, allSubcatNames.length, impactNames.length);
       for (let i = 0; i < maxLen; i++) {
         refWs.addRow([
-          projectTypes[i] || "",
+          projectPairs[i] || "",
           phases[i] || "",
           categoryNames[i] || "",
           allSubcatNames[i] || "",
@@ -786,7 +786,7 @@ export async function registerRoutes(
 
       const refDataStart = 3;
       const refDataEnd = refDataStart + maxLen - 1;
-      const ptRange = `'Reference Data'!$A$${refDataStart}:$A$${refDataEnd}`;
+      const projRange = `'Reference Data'!$A$${refDataStart}:$A$${refDataEnd}`;
       const phRange = `'Reference Data'!$B$${refDataStart}:$B$${refDataEnd}`;
       const catRange = `'Reference Data'!$C$${refDataStart}:$C$${refDataEnd}`;
       const subRange = `'Reference Data'!$D$${refDataStart}:$D$${refDataEnd}`;
@@ -801,7 +801,7 @@ export async function registerRoutes(
         error: "Please select a value from the Reference Data list or add a new one to the Reference Data sheet.",
       });
 
-      ws.getCell("A3").dataValidation = dropdownValidation(ptRange);
+      ws.getCell("A3").dataValidation = dropdownValidation(projRange);
 
       const lessonDataRows = 50;
       for (let r = r6.number + 1; r <= r6.number + lessonDataRows; r++) {
@@ -838,7 +838,6 @@ export async function registerRoutes(
       const ws = wb.Sheets[wb.SheetNames[0]];
       const rawData: (string | number | null | undefined)[][] = XLSX.utils.sheet_to_json(ws, { header: 1 });
 
-      const validProjectTypes = new Set<string>();
       const validPhases = new Set<string>();
       const validCategories = new Set<string>();
       const validSubcategories = new Set<string>();
@@ -849,18 +848,16 @@ export async function registerRoutes(
         for (let i = 2; i < refRows.length; i++) {
           const r = refRows[i];
           if (!r) continue;
-          const val0 = r[0] != null ? String(r[0]).trim() : "";
           const val1 = r[1] != null ? String(r[1]).trim() : "";
           const val2 = r[2] != null ? String(r[2]).trim() : "";
           const val3 = r[3] != null ? String(r[3]).trim() : "";
-          if (val0) validProjectTypes.add(val0);
           if (val1) validPhases.add(val1);
           if (val2) validCategories.add(val2);
           if (val3) validSubcategories.add(val3);
         }
       }
 
-      const hasRefData = validProjectTypes.size > 0 || validPhases.size > 0 || validCategories.size > 0 || validSubcategories.size > 0;
+      const hasRefData = validPhases.size > 0 || validCategories.size > 0 || validSubcategories.size > 0;
 
       const errors: ValidationError[] = [];
 
@@ -904,18 +901,14 @@ export async function registerRoutes(
 
       const isProjectHeaderRow = (row: (string | number | null | undefined)[]): boolean => {
         const first = cellStr(row, 0).toLowerCase();
-        return first === "projecttype" || first === "project type";
+        return first.startsWith("select project") || first === "projecttype" || first === "project type";
       };
 
       const isEmpty = (row: (string | number | null | undefined)[]): boolean => {
         return !row || row.every((c) => c == null || String(c).trim() === "");
       };
 
-      let projectType = "";
-      let projectName = "";
-      let projectCloseDate = "";
-      let projectManager = "";
-      let projectDescription = "";
+      let selectedProjectPair = "";
       let currentLessonType: "WentWell" | "CouldHaveGoneBetter" | null = null;
       let expectingLessonHeaders = false;
       let expectingProjectData = false;
@@ -957,19 +950,13 @@ export async function registerRoutes(
         }
 
         if (expectingProjectData && !isProjectHeaderRow(row) && !isProjectDetailsHeader(row)) {
-          projectType = cellStr(row, 0);
-          projectName = cellStr(row, 1);
-          projectCloseDate = cellDateStr(row, 2);
-          projectManager = cellStr(row, 3);
-          projectDescription = cellStr(row, 4);
+          selectedProjectPair = cellStr(row, 0);
           expectingProjectData = false;
           projectDataFound = true;
 
-          if (!projectType) errors.push({ row: rowNum, column: "ProjectType", message: "Project type is required" });
-          else if (hasRefData && validProjectTypes.size > 0 && !validProjectTypes.has(projectType)) {
-            errors.push({ row: rowNum, column: "ProjectType", message: `"${projectType}" is not in the Reference Data list. Add it to the Reference Data sheet or use an existing value.` });
+          if (!selectedProjectPair) {
+            errors.push({ row: rowNum, column: "Project", message: "A project must be selected. Choose a project from the dropdown." });
           }
-          if (!projectName) errors.push({ row: rowNum, column: "ProjectName", message: "Project name is required" });
           continue;
         }
 
@@ -1044,16 +1031,16 @@ export async function registerRoutes(
       const userId = req.user?.claims?.sub;
       const scoringCfg = await storage.getScoringConfig();
 
-      let project = await storage.findProjectByNameAndType(projectName, projectType);
+      const pairMatch = selectedProjectPair.match(/\|\s*(PRJ-\d+)\s*$/);
+      const projectCode = pairMatch ? pairMatch[1] : "";
+      let project = projectCode ? await storage.findProjectByCode(projectCode) : undefined;
       if (!project) {
-        project = await storage.createProject({
-          projectType,
-          name: projectName,
-          closeDate: projectCloseDate || null,
-          projectManager: projectManager || null,
-          description: projectDescription || null,
+        return res.json({
+          success: false,
+          lessonsCreated: 0,
+          projectsCreated: 0,
+          errors: [{ row: 3, column: "Project", message: `Project "${selectedProjectPair}" not found. Please select an existing project from the dropdown.` }],
         });
-        projectsCreated++;
       }
 
       for (const lesson of parsedLessons) {

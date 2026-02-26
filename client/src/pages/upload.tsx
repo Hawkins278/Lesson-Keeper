@@ -117,7 +117,7 @@ export default function UploadPage() {
           <div>
             <p className="text-sm font-medium">Download Template</p>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Get the Excel template with pre-filled dropdown values for project types, phases, categories and subcategories.
+              Get the Excel template with a project selector dropdown and pre-filled values for phases, categories and subcategories.
             </p>
           </div>
           <Button variant="outline" onClick={downloadTemplate} data-testid="button-download-template">
