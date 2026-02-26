@@ -103,4 +103,19 @@ app.use((req, res, next) => {
       log(`serving on port ${port}`);
     },
   );
+
+  const gracefulShutdown = (signal: string) => {
+    log(`${signal} received, shutting down gracefully...`);
+    httpServer.close(() => {
+      log("Server closed");
+      process.exit(0);
+    });
+    setTimeout(() => {
+      log("Forcing shutdown after timeout");
+      process.exit(1);
+    }, 5000);
+  };
+
+  process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+  process.on("SIGINT", () => gracefulShutdown("SIGINT"));
 })();
