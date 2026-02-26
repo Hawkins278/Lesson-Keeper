@@ -94,21 +94,42 @@ export async function registerRoutes(
     }
   });
 
+  // POST /api/projects — Create a new project (admin only)
+  app.post("/api/projects", isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const { name, projectType, closeDate, projectManager, description, status } = req.body;
+      if (!name || !projectType) {
+        return res.status(400).json({ message: "Name and project type are required" });
+      }
+      const project = await storage.createProject({
+        name,
+        projectType,
+        closeDate: closeDate || null,
+        projectManager: projectManager || null,
+        description: description || null,
+        status: status || "Project to apply learning to",
+      });
+      res.json(project);
+    } catch (error) {
+      console.error("Error creating project:", error);
+      res.status(500).json({ message: "Failed to create project" });
+    }
+  });
+
   // PATCH /api/projects/:id – Update an existing project's fields.
   // Auth: isAuthenticated + isAdmin
-  // Accepts optional body fields: name, projectType, closeDate, projectManager, description.
   app.patch("/api/projects/:id", isAuthenticated, isAdmin, async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
       if (isNaN(id)) return res.status(400).json({ message: "Invalid project ID" });
-      const { name, projectType, closeDate, projectManager, description } = req.body;
-      // Build a partial update object from provided fields only
+      const { name, projectType, closeDate, projectManager, description, status } = req.body;
       const updateData: any = {};
       if (name !== undefined) updateData.name = name;
       if (projectType !== undefined) updateData.projectType = projectType;
       if (closeDate !== undefined) updateData.closeDate = closeDate;
       if (projectManager !== undefined) updateData.projectManager = projectManager;
       if (description !== undefined) updateData.description = description;
+      if (status !== undefined) updateData.status = status;
       const updated = await storage.updateProject(id, updateData);
       if (!updated) return res.status(404).json({ message: "Project not found" });
       res.json(updated);
@@ -333,28 +354,36 @@ export async function registerRoutes(
   //   4. Build a styled .xlsx with an "APPLIED FILTERS" summary and grouped lesson rows
   app.get("/api/lessons/export", isAuthenticated, async (req: any, res) => {
     try {
-      // ── Extract filter query parameters ──
-      const { projectType, phase, categoryId, subcategoryId, search, tab } = req.query as Record<string, string | undefined>;
+      // ── Extract filter query parameters (support both single values and arrays) ──
+      const { search, tab } = req.query as Record<string, string | undefined>;
+      const toArray = (v: string | string[] | undefined): string[] => {
+        if (!v) return [];
+        return Array.isArray(v) ? v : [v];
+      };
+      const projectTypes = toArray(req.query.projectType);
+      const phases = toArray(req.query.phase);
+      const categoryIds = toArray(req.query.categoryId);
+      const subcategoryIds = toArray(req.query.subcategoryId);
+
       const allLessons = await storage.getLessons();
       const allSubcategories = await storage.getSubcategories();
       const allCategories = await storage.getCategories();
       const scoringConfigData = await storage.getScoringConfig();
       const dailyDecrement = scoringConfigData?.dailyDecrement ?? 1;
 
-      // ── Apply filters progressively ──
       let filtered = allLessons;
-      if (projectType) filtered = filtered.filter(l => l.project?.projectType === projectType);
-      if (phase) filtered = filtered.filter(l => l.phase === phase);
-      if (categoryId) {
-        const catId = parseInt(categoryId);
+      if (projectTypes.length > 0) filtered = filtered.filter(l => l.project && projectTypes.includes(l.project.projectType));
+      if (phases.length > 0) filtered = filtered.filter(l => phases.includes(l.phase));
+      if (categoryIds.length > 0) {
+        const catIdNums = categoryIds.map(Number);
         filtered = filtered.filter(l => {
           const sub = l.subcategory || allSubcategories.find(s => s.id === l.subcategoryId);
-          return sub && sub.categoryId === catId;
+          return sub && catIdNums.includes(sub.categoryId);
         });
       }
-      if (subcategoryId) {
-        const subId = parseInt(subcategoryId);
-        filtered = filtered.filter(l => l.subcategoryId === subId);
+      if (subcategoryIds.length > 0) {
+        const subIdNums = subcategoryIds.map(Number);
+        filtered = filtered.filter(l => subIdNums.includes(l.subcategoryId));
       }
       if (search) {
         const s = search.toLowerCase();
@@ -408,18 +437,17 @@ export async function registerRoutes(
       ws.mergeCells(`A${rowIdx}:J${rowIdx}`);
       rowIdx++;
 
-      // Build a human-readable description of active filters
       const tabLabel = tab === "could-be-better" ? "Could Be Better" : tab === "went-well" ? "Went Well" : "All Lessons";
       const filterParts: string[] = [];
-      if (projectType) filterParts.push(`Project Type: ${projectType}`);
-      if (phase) filterParts.push(`Phase: ${phase}`);
-      if (categoryId) {
-        const cat = allCategories.find(c => c.id === parseInt(categoryId));
-        filterParts.push(`Category: ${cat?.name || categoryId}`);
+      if (projectTypes.length > 0) filterParts.push(`Project Type: ${projectTypes.join(", ")}`);
+      if (phases.length > 0) filterParts.push(`Phase: ${phases.join(", ")}`);
+      if (categoryIds.length > 0) {
+        const names = categoryIds.map(id => allCategories.find(c => c.id === parseInt(id))?.name || id);
+        filterParts.push(`Category: ${names.join(", ")}`);
       }
-      if (subcategoryId) {
-        const sub = allSubcategories.find(s => s.id === parseInt(subcategoryId));
-        filterParts.push(`Subcategory: ${sub?.name || subcategoryId}`);
+      if (subcategoryIds.length > 0) {
+        const names = subcategoryIds.map(id => allSubcategories.find(s => s.id === parseInt(id))?.name || id);
+        filterParts.push(`Subcategory: ${names.join(", ")}`);
       }
       if (search) filterParts.push(`Search: "${search}"`);
       const filterText = filterParts.length > 0
@@ -798,13 +826,9 @@ export async function registerRoutes(
     try {
       const allCategories = await storage.getCategories();
       const allSubcategories = await storage.getSubcategories();
+      const allProjects = await storage.getProjects();
 
-      // Load reference values; fall back to hardcoded defaults if DB is empty
-      const ptValues = await storage.getReferenceValues("ProjectType");
       const phValues = await storage.getReferenceValues("ProjectPhase");
-      const projectTypes = ptValues.length > 0
-        ? ptValues.map((v) => v.value)
-        : ["IT Change", "Construction", "Business Change", "Infrastructure", "Software Development", "Organizational"];
       const phases = phValues.length > 0
         ? phValues.map((v) => v.value)
         : ["Initiation", "Planning", "Delivery", "Close-out"];
@@ -812,7 +836,6 @@ export async function registerRoutes(
         ? allCategories.map((c) => c.name)
         : ["Governance", "Planning", "Execution", "Communication"];
 
-      // Build a category→subcategory mapping; use defaults if empty
       const subcatMap: Record<string, string[]> = {};
       if (allSubcategories.length > 0) {
         for (const sub of allSubcategories) {
@@ -829,9 +852,11 @@ export async function registerRoutes(
       }
       const allSubcatNames = Object.values(subcatMap).flat();
 
+      // Build project ID+Name list for dropdown
+      const projectOptions = allProjects.map(p => `${p.projectCode} - ${p.name}`);
+
       const wb = new ExcelJS.Workbook();
 
-      // ── Reusable cell styles ──
       const sectionHeaderFill: ExcelJS.FillPattern = { type: "pattern", pattern: "solid", fgColor: { argb: "FF2B4C7E" } };
       const sectionHeaderFont: Partial<ExcelJS.Font> = { bold: true, color: { argb: "FFFFFFFF" }, size: 12 };
       const colHeaderFill: ExcelJS.FillPattern = { type: "pattern", pattern: "solid", fgColor: { argb: "FFD6E4F0" } };
@@ -840,7 +865,6 @@ export async function registerRoutes(
         bottom: { style: "thin", color: { argb: "FF2B4C7E" } },
       };
 
-      // ── Sheet 1: Lessons Template ──
       const ws = wb.addWorksheet("Lessons Template");
 
       const impactLevelsList = await storage.getImpactLevels();
@@ -850,20 +874,21 @@ export async function registerRoutes(
         { width: 40 }, { width: 55 }, { width: 48 }, { width: 20 }, { width: 24 }, { width: 24 }, { width: 40 },
       ];
 
-      // Row 1: "PROJECT DETAILS" section header
-      const r1 = ws.addRow(["PROJECT DETAILS", "", "", "", "", "", ""]);
+      // Row 1: "PROJECT" section header
+      const r1 = ws.addRow(["PROJECT", "", "", "", "", "", ""]);
       ws.mergeCells(r1.number, 1, r1.number, 7);
       r1.getCell(1).fill = sectionHeaderFill;
       r1.getCell(1).font = sectionHeaderFont;
       r1.height = 28;
 
-      // Row 2: Project column headers
-      const r2 = ws.addRow(["ProjectType", "ProjectName", "ProjectCloseDate", "ProjectManager", "ProjectDescription", "", ""]);
-      r2.eachCell((cell) => { cell.fill = colHeaderFill; cell.font = colHeaderFont; cell.border = colHeaderBorder; });
+      // Row 2: Project column header — single dropdown for project selection
+      const r2 = ws.addRow(["Project (ID - Name)", "", "", "", "", "", ""]);
+      r2.getCell(1).fill = colHeaderFill;
+      r2.getCell(1).font = colHeaderFont;
+      r2.getCell(1).border = colHeaderBorder;
 
-      // Row 3: Data entry row for project details (close date formatted as text)
+      // Row 3: Data entry row for project selection
       const dataRow = ws.addRow(["", "", "", "", "", "", ""]);
-      dataRow.getCell(3).numFmt = "@";
 
       ws.addRow([]);
 
@@ -874,7 +899,7 @@ export async function registerRoutes(
       r5.getCell(1).font = sectionHeaderFont;
       r5.height = 28;
 
-      // Row 6: Lesson column headers for "Could Have Gone Better"
+      // Row 6: Lesson column headers
       const r6 = ws.addRow(["LessonName", "LessonEventDescription", "KeyLearningOrAction", "ProjectPhase", "LessonCategory", "LessonSubcategory", "Impact"]);
       r6.eachCell((cell) => { cell.fill = colHeaderFill; cell.font = colHeaderFont; cell.border = colHeaderBorder; });
 
@@ -891,22 +916,21 @@ export async function registerRoutes(
       const r11 = ws.addRow(["LessonName", "LessonEventDescription", "KeyLearningOrAction", "ProjectPhase", "LessonCategory", "LessonSubcategory", "Impact"]);
       r11.eachCell((cell) => { cell.fill = colHeaderFill; cell.font = colHeaderFont; cell.border = colHeaderBorder; });
 
-      // ── Sheet 2: Reference Data (used as source for dropdown validations) ──
+      // ── Sheet 2: Reference Data ──
       const refWs = wb.addWorksheet("Reference Data");
-      refWs.columns = [{ width: 28 }, { width: 22 }, { width: 28 }, { width: 28 }, { width: 44 }];
+      refWs.columns = [{ width: 44 }, { width: 22 }, { width: 28 }, { width: 28 }, { width: 44 }];
 
-      const refHeader = refWs.addRow(["ProjectType", "ProjectPhase", "LessonCategory", "LessonSubcategory", "Impact"]);
+      const refHeader = refWs.addRow(["Project (ID - Name)", "ProjectPhase", "LessonCategory", "LessonSubcategory", "Impact"]);
       refHeader.eachCell((cell) => { cell.fill = sectionHeaderFill; cell.font = sectionHeaderFont; });
       refHeader.height = 24;
 
-      const noteRow = refWs.addRow(["Add new values below", "Add new values below", "Add new values below", "Add new values below", "Add new values below"]);
+      const noteRow = refWs.addRow(["Available projects", "Add new values below", "Add new values below", "Add new values below", "Add new values below"]);
       noteRow.eachCell((cell) => { cell.fill = colHeaderFill; cell.font = { italic: true, size: 9, color: { argb: "FF555555" } }; });
 
-      // Populate reference data columns with known values
-      const maxLen = Math.max(projectTypes.length, phases.length, categoryNames.length, allSubcatNames.length, impactNames.length);
+      const maxLen = Math.max(projectOptions.length, phases.length, categoryNames.length, allSubcatNames.length, impactNames.length);
       for (let i = 0; i < maxLen; i++) {
         refWs.addRow([
-          projectTypes[i] || "",
+          projectOptions[i] || "",
           phases[i] || "",
           categoryNames[i] || "",
           allSubcatNames[i] || "",
@@ -914,16 +938,14 @@ export async function registerRoutes(
         ]);
       }
 
-      // ── Build dropdown validation references pointing to the Reference Data sheet ──
       const refDataStart = 3;
       const refDataEnd = refDataStart + maxLen - 1;
-      const ptRange = `'Reference Data'!$A$${refDataStart}:$A$${refDataEnd}`;
+      const projRange = `'Reference Data'!$A$${refDataStart}:$A$${refDataEnd}`;
       const phRange = `'Reference Data'!$B$${refDataStart}:$B$${refDataEnd}`;
       const catRange = `'Reference Data'!$C$${refDataStart}:$C$${refDataEnd}`;
       const subRange = `'Reference Data'!$D$${refDataStart}:$D$${refDataEnd}`;
       const impactRange = `'Reference Data'!$E$${refDataStart}:$E$${refDataEnd}`;
 
-      // Helper to create a list-based data-validation rule
       const dropdownValidation = (formula: string): ExcelJS.DataValidation => ({
         type: "list",
         allowBlank: true,
@@ -933,19 +955,16 @@ export async function registerRoutes(
         error: "Please select a value from the Reference Data list or add a new one to the Reference Data sheet.",
       });
 
-      // Apply ProjectType dropdown to the project data row
-      ws.getCell("A3").dataValidation = dropdownValidation(ptRange);
+      // Apply Project dropdown to the project data row
+      ws.getCell("A3").dataValidation = dropdownValidation(projRange);
 
-      // Apply dropdowns to 50 lesson data rows in each section
       const lessonDataRows = 50;
-      // "Could Have Gone Better" lesson rows
       for (let r = r6.number + 1; r <= r6.number + lessonDataRows; r++) {
         ws.getCell(r, 4).dataValidation = dropdownValidation(phRange);
         ws.getCell(r, 5).dataValidation = dropdownValidation(catRange);
         ws.getCell(r, 6).dataValidation = dropdownValidation(subRange);
         ws.getCell(r, 7).dataValidation = dropdownValidation(impactRange);
       }
-      // "Went Well" lesson rows
       for (let r = r11.number + 1; r <= r11.number + lessonDataRows; r++) {
         ws.getCell(r, 4).dataValidation = dropdownValidation(phRange);
         ws.getCell(r, 5).dataValidation = dropdownValidation(catRange);
@@ -953,7 +972,6 @@ export async function registerRoutes(
         ws.getCell(r, 7).dataValidation = dropdownValidation(impactRange);
       }
 
-      // Send the generated template as a downloadable .xlsx
       const buf = await wb.xlsx.writeBuffer();
 
       res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
@@ -1057,7 +1075,8 @@ export async function registerRoutes(
       };
 
       const isProjectDetailsHeader = (row: (string | number | null | undefined)[]): boolean => {
-        return cellStr(row, 0).toUpperCase() === "PROJECT DETAILS";
+        const upper = cellStr(row, 0).toUpperCase();
+        return upper === "PROJECT DETAILS" || upper === "PROJECT";
       };
 
       const isLessonHeaderRow = (row: (string | number | null | undefined)[]): boolean => {
@@ -1067,7 +1086,7 @@ export async function registerRoutes(
 
       const isProjectHeaderRow = (row: (string | number | null | undefined)[]): boolean => {
         const first = cellStr(row, 0).toLowerCase();
-        return first === "projecttype" || first === "project type";
+        return first === "projecttype" || first === "project type" || first.startsWith("project (id");
       };
 
       const isEmpty = (row: (string | number | null | undefined)[]): boolean => {
@@ -1080,10 +1099,12 @@ export async function registerRoutes(
       let projectCloseDate = "";
       let projectManager = "";
       let projectDescription = "";
+      let projectCodeFromTemplate = "";
       let currentLessonType: "WentWell" | "CouldHaveGoneBetter" | null = null;
       let expectingLessonHeaders = false;
       let expectingProjectData = false;
       let projectDataFound = false;
+      let isNewTemplateFormat = false;
 
       // Pre-load impact levels for mapping lesson impact strings to DB records
       const allImpactLevels = await storage.getImpactLevels();
@@ -1121,27 +1142,47 @@ export async function registerRoutes(
           continue;
         }
 
-        // Skip the project column-header row (e.g. "ProjectType", "ProjectName", ...)
+        // Skip the project column-header row and detect template format
         if (expectingProjectData && isProjectHeaderRow(row)) {
+          const headerText = cellStr(row, 0).toLowerCase();
+          if (headerText.startsWith("project (id")) {
+            isNewTemplateFormat = true;
+          }
           continue;
         }
 
         // Parse the actual project data row
         if (expectingProjectData && !isProjectHeaderRow(row) && !isProjectDetailsHeader(row)) {
-          projectType = cellStr(row, 0);
-          projectName = cellStr(row, 1);
-          projectCloseDate = cellDateStr(row, 2);
-          projectManager = cellStr(row, 3);
-          projectDescription = cellStr(row, 4);
+          if (isNewTemplateFormat) {
+            // New format: single cell with "PRJ-001 - Project Name"
+            const projectSelection = cellStr(row, 0);
+            if (!projectSelection) {
+              errors.push({ row: rowNum, column: "Project", message: "Project selection is required. Select a project from the dropdown." });
+            } else {
+              const dashIndex = projectSelection.indexOf(" - ");
+              if (dashIndex > 0) {
+                projectCodeFromTemplate = projectSelection.substring(0, dashIndex).trim();
+                projectName = projectSelection.substring(dashIndex + 3).trim();
+              } else {
+                projectCodeFromTemplate = projectSelection.trim();
+              }
+            }
+          } else {
+            // Legacy format: separate columns for type, name, etc.
+            projectType = cellStr(row, 0);
+            projectName = cellStr(row, 1);
+            projectCloseDate = cellDateStr(row, 2);
+            projectManager = cellStr(row, 3);
+            projectDescription = cellStr(row, 4);
+
+            if (!projectType) errors.push({ row: rowNum, column: "ProjectType", message: "Project type is required" });
+            else if (hasRefData && validProjectTypes.size > 0 && !validProjectTypes.has(projectType)) {
+              errors.push({ row: rowNum, column: "ProjectType", message: `"${projectType}" is not in the Reference Data list. Add it to the Reference Data sheet or use an existing value.` });
+            }
+            if (!projectName) errors.push({ row: rowNum, column: "ProjectName", message: "Project name is required" });
+          }
           expectingProjectData = false;
           projectDataFound = true;
-
-          // Validate required project fields
-          if (!projectType) errors.push({ row: rowNum, column: "ProjectType", message: "Project type is required" });
-          else if (hasRefData && validProjectTypes.size > 0 && !validProjectTypes.has(projectType)) {
-            errors.push({ row: rowNum, column: "ProjectType", message: `"${projectType}" is not in the Reference Data list. Add it to the Reference Data sheet or use an existing value.` });
-          }
-          if (!projectName) errors.push({ row: rowNum, column: "ProjectName", message: "Project name is required" });
           continue;
         }
 
@@ -1224,17 +1265,26 @@ export async function registerRoutes(
       const userId = req.user?.claims?.sub;
       const scoringCfg = await storage.getScoringConfig();
 
-      // Find existing project or create a new one
-      let project = await storage.findProjectByNameAndType(projectName, projectType);
-      if (!project) {
-        project = await storage.createProject({
-          projectType,
-          name: projectName,
-          closeDate: projectCloseDate || null,
-          projectManager: projectManager || null,
-          description: projectDescription || null,
-        });
-        projectsCreated++;
+      // Find existing project (by code for new template, or by name+type for legacy)
+      let project;
+      if (isNewTemplateFormat && projectCodeFromTemplate) {
+        project = await storage.findProjectByCode(projectCodeFromTemplate);
+        if (!project) {
+          errors.push({ row: 1, column: "Project", message: `Project "${projectCodeFromTemplate}" not found. Create the project first before uploading lessons.` });
+          return res.json({ success: false, lessonsCreated: 0, projectsCreated: 0, errors });
+        }
+      } else {
+        project = await storage.findProjectByNameAndType(projectName, projectType);
+        if (!project) {
+          project = await storage.createProject({
+            projectType,
+            name: projectName,
+            closeDate: projectCloseDate || null,
+            projectManager: projectManager || null,
+            description: projectDescription || null,
+          });
+          projectsCreated++;
+        }
       }
 
       // Create each parsed lesson and update subcategory scores
@@ -1294,6 +1344,11 @@ export async function registerRoutes(
           createdByUserId: userId || null,
         });
         lessonsCreated++;
+      }
+
+      // Auto-update project status when lessons are loaded
+      if (lessonsCreated > 0 && project.status === "Project to apply learning to") {
+        await storage.updateProjectStatus(project.id, "Live project with learning captured and learning still to be applied");
       }
 
       res.json({ success: true, lessonsCreated, projectsCreated, errors: [] });
@@ -1576,6 +1631,65 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Error downloading users:", error);
       res.status(500).json({ message: "Failed to download users" });
+    }
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════
+  //  LEARNING APPLICATION ROUTES
+  // ═══════════════════════════════════════════════════════════════════════
+
+  // GET /api/learning-applications — Get all learning applications with details
+  app.get("/api/learning-applications", isAuthenticated, async (req: any, res) => {
+    try {
+      const projectId = req.query.projectId ? parseInt(req.query.projectId) : undefined;
+      const apps = await storage.getLearningApplicationsWithDetails(projectId);
+      res.json(apps);
+    } catch (error) {
+      console.error("Error fetching learning applications:", error);
+      res.status(500).json({ message: "Failed to fetch learning applications" });
+    }
+  });
+
+  // POST /api/learning-applications — Apply lesson subcategories to a project
+  app.post("/api/learning-applications", isAuthenticated, async (req: any, res) => {
+    try {
+      const { projectId, subcategoryIds } = req.body;
+      if (!projectId || !subcategoryIds || !Array.isArray(subcategoryIds)) {
+        return res.status(400).json({ message: "projectId and subcategoryIds array are required" });
+      }
+      const userId = req.user?.claims?.sub;
+      const existing = await storage.getLearningApplications(projectId);
+      const existingSubIds = new Set(existing.map(a => a.subcategoryId));
+      const created = [];
+      for (const subcategoryId of subcategoryIds) {
+        const subId = parseInt(subcategoryId);
+        if (isNaN(subId)) continue;
+        if (existingSubIds.has(subId)) continue;
+        const app = await storage.createLearningApplication({
+          projectId: parseInt(projectId),
+          subcategoryId: subId,
+          appliedByUserId: userId || null,
+        });
+        created.push(app);
+        existingSubIds.add(subId);
+      }
+      res.json({ created: created.length, applications: created });
+    } catch (error) {
+      console.error("Error creating learning applications:", error);
+      res.status(500).json({ message: "Failed to create learning applications" });
+    }
+  });
+
+  // DELETE /api/learning-applications/:id — Remove a learning application
+  app.delete("/api/learning-applications/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ message: "Invalid ID" });
+      await storage.deleteLearningApplication(id);
+      res.json({ message: "Learning application removed" });
+    } catch (error) {
+      console.error("Error deleting learning application:", error);
+      res.status(500).json({ message: "Failed to delete learning application" });
     }
   });
 

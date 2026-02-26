@@ -37,6 +37,7 @@ import AdminPage from "@/pages/admin";
 import UserAdminPage from "@/pages/user-admin";
 import SettingsPage from "@/pages/settings";
 import ScoringRatesPage from "@/pages/scoring-rates";
+import LearningAppliedPage from "@/pages/learning-applied";
 import { Skeleton } from "@/components/ui/skeleton";
 import hawkinsLogo from "@assets/Hawkins-Digital_1770883345237.jpg";
 import citbLogo from "@assets/citb_logo_1770915007635.png";
@@ -101,6 +102,7 @@ function AuthenticatedApp() {
               <Route path="/" component={Dashboard} />
               <Route path="/upload" component={UploadPage} />
               <Route path="/projects" component={ProjectsPage} />
+              <Route path="/learning-applied" component={LearningAppliedPage} />
               {/* Admin-only routes — access control is enforced within these page components */}
               <Route path="/admin" component={AdminPage} />
               <Route path="/user-admin" component={UserAdminPage} />

@@ -24,8 +24,9 @@ import {
   type ImpactLevel, type InsertImpactLevel,
   type User, type UserRole,
   type ScoringConfig,
+  type LearningApplication, type InsertLearningApplication,
   projects, lessonCategories, lessonSubcategories, lessons, referenceValues, impactLevels, users,
-  scoringConfig, SCORING_DEFAULTS,
+  scoringConfig, SCORING_DEFAULTS, learningApplications,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, desc, sql, ne, or, inArray } from "drizzle-orm";
@@ -102,6 +103,17 @@ export interface IStorage {
   getScoringConfig(): Promise<ScoringConfig>;
   updateScoringConfig(data: { initialScore: number; incrementScore: number; dailyDecrement: number }): Promise<ScoringConfig>;
   recalculateAllScores(config: { initialScore: number; incrementScore: number; dailyDecrement: number }): Promise<void>;
+
+  // --- Project code generation ---
+  getNextProjectCode(): Promise<string>;
+  findProjectByCode(code: string): Promise<Project | undefined>;
+  updateProjectStatus(id: number, status: string): Promise<Project | undefined>;
+
+  // --- Learning application operations ---
+  getLearningApplications(projectId?: number): Promise<LearningApplication[]>;
+  createLearningApplication(data: InsertLearningApplication): Promise<LearningApplication>;
+  deleteLearningApplication(id: number): Promise<void>;
+  getLearningApplicationsWithDetails(projectId?: number): Promise<any[]>;
 }
 
 /**
@@ -129,9 +141,9 @@ export class DatabaseStorage implements IStorage {
     return project;
   }
 
-  // Creates a new project record from Excel upload data
   async createProject(project: InsertProject): Promise<Project> {
-    const [created] = await db.insert(projects).values(project).returning();
+    const projectCode = await this.getNextProjectCode();
+    const [created] = await db.insert(projects).values({ ...project, projectCode }).returning();
     return created;
   }
 
@@ -603,6 +615,58 @@ export class DatabaseStorage implements IStorage {
         firstRecordedDate: firstDate,
       }).where(eq(lessonSubcategories.id, sub.id));
     }
+  }
+
+  // ==================== PROJECT CODE & STATUS OPERATIONS ====================
+
+  async getNextProjectCode(): Promise<string> {
+    const [result] = await db.select({ maxCode: sql<string>`MAX(project_code)` }).from(projects);
+    const maxCode = result?.maxCode;
+    if (!maxCode) return "PRJ-001";
+    const num = parseInt(maxCode.replace("PRJ-", ""), 10);
+    return `PRJ-${String(num + 1).padStart(3, "0")}`;
+  }
+
+  async findProjectByCode(code: string): Promise<Project | undefined> {
+    const [project] = await db.select().from(projects).where(eq(projects.projectCode, code));
+    return project;
+  }
+
+  async updateProjectStatus(id: number, status: string): Promise<Project | undefined> {
+    const [updated] = await db.update(projects).set({ status }).where(eq(projects.id, id)).returning();
+    return updated;
+  }
+
+  // ==================== LEARNING APPLICATION OPERATIONS ====================
+
+  async getLearningApplications(projectId?: number): Promise<LearningApplication[]> {
+    if (projectId) {
+      return db.select().from(learningApplications).where(eq(learningApplications.projectId, projectId)).orderBy(desc(learningApplications.appliedAt));
+    }
+    return db.select().from(learningApplications).orderBy(desc(learningApplications.appliedAt));
+  }
+
+  async createLearningApplication(data: InsertLearningApplication): Promise<LearningApplication> {
+    const [created] = await db.insert(learningApplications).values(data).returning();
+    return created;
+  }
+
+  async deleteLearningApplication(id: number): Promise<void> {
+    await db.delete(learningApplications).where(eq(learningApplications.id, id));
+  }
+
+  async getLearningApplicationsWithDetails(projectId?: number): Promise<any[]> {
+    const apps = await this.getLearningApplications(projectId);
+    const allProjects = await this.getProjects();
+    const allSubcategories = await this.getSubcategories();
+    const allCategories = await this.getCategories();
+
+    return apps.map(app => {
+      const project = allProjects.find(p => p.id === app.projectId);
+      const subcategory = allSubcategories.find(s => s.id === app.subcategoryId);
+      const category = subcategory ? allCategories.find(c => c.id === subcategory.categoryId) : undefined;
+      return { ...app, project, subcategory, category };
+    });
   }
 }
 

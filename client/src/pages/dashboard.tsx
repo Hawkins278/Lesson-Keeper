@@ -110,23 +110,26 @@ function buildFilterSummary(filters: FilterState, activeTab: TabType, categories
   const parts: { label: string; value: string }[] = [];
   const tabLabel = activeTab === "could-be-better" ? "Could Be Better" : activeTab === "went-well" ? "Went Well" : "All Lessons";
   parts.push({ label: "View", value: tabLabel });
-  if (filters.projectType) parts.push({ label: "Project Type", value: filters.projectType });
-  if (filters.phase) parts.push({ label: "Phase", value: filters.phase });
-  if (filters.categoryId) {
-    const cat = categories.find(c => c.id === parseInt(filters.categoryId!));
-    parts.push({ label: "Category", value: cat?.name || filters.categoryId });
+  if (filters.projectTypes.length > 0) {
+    parts.push({ label: "Project Type", value: filters.projectTypes.length === 1 ? filters.projectTypes[0] : `${filters.projectTypes.length} types` });
   }
-  if (filters.subcategoryId) {
-    const sub = subcategories.find(s => s.id === parseInt(filters.subcategoryId!));
-    parts.push({ label: "Subcategory", value: sub?.name || filters.subcategoryId });
+  if (filters.phases.length > 0) {
+    parts.push({ label: "Phase", value: filters.phases.length === 1 ? filters.phases[0] : `${filters.phases.length} phases` });
+  }
+  if (filters.categoryIds.length > 0) {
+    const names = filters.categoryIds.map(id => categories.find(c => c.id === parseInt(id))?.name || id);
+    parts.push({ label: "Category", value: names.length === 1 ? names[0] : `${names.length} categories` });
+  }
+  if (filters.subcategoryIds.length > 0) {
+    const names = filters.subcategoryIds.map(id => subcategories.find(s => s.id === parseInt(id))?.name || id);
+    parts.push({ label: "Subcategory", value: names.length === 1 ? names[0] : `${names.length} subcategories` });
   }
   if (filters.search) parts.push({ label: "Search", value: `"${filters.search}"` });
   return parts;
 }
 
-/** Returns true if any filter dimension has been set (used to decide whether to show "No filters applied" text). */
 function hasActiveFilters(filters: FilterState) {
-  return filters.projectType !== null || filters.phase !== null || filters.categoryId !== null || filters.subcategoryId !== null || filters.search !== "";
+  return filters.projectTypes.length > 0 || filters.phases.length > 0 || filters.categoryIds.length > 0 || filters.subcategoryIds.length > 0 || filters.search !== "";
 }
 
 export default function Dashboard() {
@@ -140,10 +143,10 @@ export default function Dashboard() {
   // --- State: active tab, filter selections, UI toggles ---
   const [activeTab, setActiveTab] = useState<TabType>("could-be-better");
   const [filters, setFilters] = useState<FilterState>({
-    projectType: null,
-    phase: null,
-    categoryId: null,
-    subcategoryId: null,
+    projectTypes: [],
+    phases: [],
+    categoryIds: [],
+    subcategoryIds: [],
     search: "",
   });
   const [selectedLesson, setSelectedLesson] = useState<LessonWithRelations | null>(null);
@@ -189,18 +192,16 @@ export default function Dashboard() {
    */
   const filteredLessons = useMemo(() => {
     return lessons.filter((lesson) => {
-      if (filters.projectType) {
-        // Resolve project either from the pre-joined relation or the local cache
+      if (filters.projectTypes.length > 0) {
         const project = lesson.project || projects.find((p) => p.id === lesson.projectId);
-        if (!project || project.projectType !== filters.projectType) return false;
+        if (!project || !filters.projectTypes.includes(project.projectType)) return false;
       }
-      if (filters.phase && lesson.phase !== filters.phase) return false;
-      if (filters.categoryId) {
-        // Category filter operates through the subcategory's parent categoryId
+      if (filters.phases.length > 0 && !filters.phases.includes(lesson.phase)) return false;
+      if (filters.categoryIds.length > 0) {
         const sub = lesson.subcategory || subcategories.find((s) => s.id === lesson.subcategoryId);
-        if (!sub || sub.categoryId !== parseInt(filters.categoryId)) return false;
+        if (!sub || !filters.categoryIds.includes(String(sub.categoryId))) return false;
       }
-      if (filters.subcategoryId && lesson.subcategoryId !== parseInt(filters.subcategoryId)) return false;
+      if (filters.subcategoryIds.length > 0 && !filters.subcategoryIds.includes(String(lesson.subcategoryId))) return false;
       if (filters.search) {
         const search = filters.search.toLowerCase();
         if (
@@ -290,10 +291,10 @@ export default function Dashboard() {
   const buildExportParams = useCallback(() => {
     const params = new URLSearchParams();
     params.set("tab", activeTab);
-    if (filters.projectType) params.set("projectType", filters.projectType);
-    if (filters.phase) params.set("phase", filters.phase);
-    if (filters.categoryId) params.set("categoryId", filters.categoryId);
-    if (filters.subcategoryId) params.set("subcategoryId", filters.subcategoryId);
+    filters.projectTypes.forEach(v => params.append("projectType", v));
+    filters.phases.forEach(v => params.append("phase", v));
+    filters.categoryIds.forEach(v => params.append("categoryId", v));
+    filters.subcategoryIds.forEach(v => params.append("subcategoryId", v));
     if (filters.search) params.set("search", filters.search);
     return params.toString();
   }, [activeTab, filters]);

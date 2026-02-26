@@ -1,52 +1,46 @@
-/**
- * @file Upload Page — Excel file upload for bulk lesson import.
- *
- * @description
- * Admin-only page that provides two key workflows:
- *
- * 1. **Template download** — Opens `/api/template` in a new tab to download a
- *    pre-configured Excel template. The template contains dropdown-validated
- *    columns for project types, phases, categories, and subcategories so that
- *    users can fill in lessons offline with valid values.
- *
- * 2. **File upload & import** — Users drag-and-drop or browse for an .xlsx/.xls
- *    file. The file is POSTed as multipart/form-data to `/api/upload` (handled
- *    server-side by multer). On success, the response includes:
- *    - `lessonsCreated` / `projectsCreated` counts
- *    - A `success` boolean
- *    - An `errors` array of per-row validation issues (row number, column, message)
- *
- *    After a successful import the component invalidates all relevant query
- *    caches (lessons, projects, categories, subcategories) so the rest of the
- *    app reflects the new data immediately.
- *
- * 3. **Results display** — Shows a summary card with import counts and, when
- *    validation errors exist, a scrollable list of row-level issues so the user
- *    can correct and re-upload.
- *
- * Access: Restricted to admin / superadmin / superadministrator roles.
- * Non-admin users see an "access denied" message.
- */
 import { useState, useCallback } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Skeleton } from "@/components/ui/skeleton";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { isUnauthorizedError } from "@/lib/auth-utils";
-import { Upload, Download, FileSpreadsheet, CheckCircle2, AlertCircle, Loader2 } from "lucide-react";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { PROJECT_STATUSES, type Project } from "@shared/schema";
+import {
+  Upload,
+  Download,
+  FileSpreadsheet,
+  CheckCircle2,
+  AlertCircle,
+  Loader2,
+  ChevronDown,
+  ChevronRight,
+  Plus,
+  FolderOpen,
+} from "lucide-react";
 
-/** A single row-level validation error returned by the server after processing the uploaded file. */
 interface ValidationError {
   row: number;
   column: string;
   message: string;
 }
 
-/** Server response shape from POST /api/upload after processing an Excel file. */
 interface UploadResult {
   success: boolean;
   lessonsCreated: number;
@@ -54,17 +48,28 @@ interface UploadResult {
   errors: ValidationError[];
 }
 
+interface ReferenceData {
+  projectTypes: { id: number; value: string }[];
+  projectPhases: { id: number; value: string }[];
+}
+
 export default function UploadPage() {
   const { user } = useAuth();
   const [file, setFile] = useState<File | null>(null);
-  /** Controls the visual highlight of the drop zone when a file is dragged over it. */
   const [dragActive, setDragActive] = useState(false);
-  /** Stores the server response after a successful or partially-successful upload. */
   const [result, setResult] = useState<UploadResult | null>(null);
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
+  const [projectsOpen, setProjectsOpen] = useState(false);
+  const [createdProjectCode, setCreatedProjectCode] = useState<string | null>(null);
 
-  // --- Access gate: only admin-level roles can see this page ---
+  const [newProjectName, setNewProjectName] = useState("");
+  const [newProjectType, setNewProjectType] = useState("");
+  const [newCloseDate, setNewCloseDate] = useState("");
+  const [newProjectManager, setNewProjectManager] = useState("");
+  const [newDescription, setNewDescription] = useState("");
+
+  const { toast } = useToast();
+  const qc = useQueryClient();
+
   const userRole = user?.role?.toLowerCase().trim();
   if (userRole !== "admin" && userRole !== "superadmin" && userRole !== "superadministrator") {
     return (
@@ -74,16 +79,78 @@ export default function UploadPage() {
     );
   }
 
-  /**
-   * Upload mutation: wraps the file in FormData and POSTs to /api/upload.
-   * The server (multer middleware) parses the multipart body, validates each
-   * row, and returns an UploadResult with counts and any validation errors.
-   *
-   * On success, all related query caches are invalidated so the dashboard,
-   * projects page, and filter dropdowns reflect the newly imported data.
-   *
-   * On 401 errors, the user is redirected to the login flow after a short delay.
-   */
+  const { data: referenceData } = useQuery<ReferenceData>({
+    queryKey: ["/api/reference-data"],
+  });
+
+  const { data: projects, isLoading: projectsLoading } = useQuery<Project[]>({
+    queryKey: ["/api/projects"],
+  });
+
+  const createProjectMutation = useMutation({
+    mutationFn: async (body: {
+      name: string;
+      projectType: string;
+      closeDate?: string;
+      projectManager?: string;
+      description?: string;
+      status?: string;
+    }) => {
+      const res = await apiRequest("POST", "/api/projects", body);
+      return res.json() as Promise<Project>;
+    },
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["/api/projects"] });
+      setCreatedProjectCode(data.projectCode ?? null);
+      setNewProjectName("");
+      setNewProjectType("");
+      setNewCloseDate("");
+      setNewProjectManager("");
+      setNewDescription("");
+      toast({ title: "Project created", description: `Project ${data.projectCode} created successfully.` });
+    },
+    onError: (error: Error) => {
+      if (isUnauthorizedError(error)) {
+        toast({ title: "Unauthorized", description: "Logging in again...", variant: "destructive" });
+        setTimeout(() => { window.location.href = "/api/login"; }, 500);
+        return;
+      }
+      toast({ title: "Failed to create project", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const updateStatusMutation = useMutation({
+    mutationFn: async ({ id, status }: { id: number; status: string }) => {
+      const res = await apiRequest("PATCH", `/api/projects/${id}`, { status });
+      return res.json() as Promise<Project>;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["/api/projects"] });
+      toast({ title: "Status updated" });
+    },
+    onError: (error: Error) => {
+      if (isUnauthorizedError(error)) {
+        toast({ title: "Unauthorized", description: "Logging in again...", variant: "destructive" });
+        setTimeout(() => { window.location.href = "/api/login"; }, 500);
+        return;
+      }
+      toast({ title: "Failed to update status", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const handleCreateProject = () => {
+    if (!newProjectName.trim() || !newProjectType) return;
+    const body: Record<string, string> = {
+      name: newProjectName.trim(),
+      projectType: newProjectType,
+      status: PROJECT_STATUSES[0],
+    };
+    if (newCloseDate) body.closeDate = newCloseDate;
+    if (newProjectManager.trim()) body.projectManager = newProjectManager.trim();
+    if (newDescription.trim()) body.description = newDescription.trim();
+    createProjectMutation.mutate(body as any);
+  };
+
   const uploadMutation = useMutation({
     mutationFn: async (file: File) => {
       const formData = new FormData();
@@ -102,16 +169,14 @@ export default function UploadPage() {
     onSuccess: (data) => {
       setResult(data);
       if (data.success) {
-        // Invalidate all data caches so the app reflects the newly imported lessons
-        queryClient.invalidateQueries({ queryKey: ["/api/lessons"] });
-        queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
-        queryClient.invalidateQueries({ queryKey: ["/api/categories"] });
-        queryClient.invalidateQueries({ queryKey: ["/api/subcategories"] });
+        qc.invalidateQueries({ queryKey: ["/api/lessons"] });
+        qc.invalidateQueries({ queryKey: ["/api/projects"] });
+        qc.invalidateQueries({ queryKey: ["/api/categories"] });
+        qc.invalidateQueries({ queryKey: ["/api/subcategories"] });
         toast({ title: "Upload successful", description: `${data.lessonsCreated} lessons imported from ${data.projectsCreated} projects.` });
       }
     },
     onError: (error: Error) => {
-      // Handle expired session by redirecting to the login endpoint
       if (isUnauthorizedError(error)) {
         toast({ title: "Unauthorized", description: "Logging in again...", variant: "destructive" });
         setTimeout(() => { window.location.href = "/api/login"; }, 500);
@@ -121,10 +186,6 @@ export default function UploadPage() {
     },
   });
 
-  /**
-   * Drag-and-drop handler: validates that the dropped file has an Excel extension
-   * before accepting it. Clears any previous upload result when a new file is selected.
-   */
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setDragActive(false);
@@ -137,7 +198,6 @@ export default function UploadPage() {
     }
   }, [toast]);
 
-  /** File browser handler: accepts the first file from the native file picker dialog. */
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (f) {
@@ -146,15 +206,15 @@ export default function UploadPage() {
     }
   }, []);
 
-  /** Triggers the upload mutation with the currently selected file. */
   const handleUpload = () => {
     if (file) uploadMutation.mutate(file);
   };
 
-  /** Opens the server-generated Excel template in a new tab for download. */
   const downloadTemplate = () => {
     window.open("/api/template", "_blank");
   };
+
+  const projectTypes = referenceData?.projectTypes?.map((pt) => pt.value) ?? [];
 
   return (
     <div className="p-6 max-w-3xl mx-auto space-y-6">
@@ -164,6 +224,137 @@ export default function UploadPage() {
           Download the template, fill it in, and import lessons from Excel.
         </p>
       </div>
+
+      <Card className="p-6 space-y-4">
+        <div className="flex items-center gap-2">
+          <FolderOpen className="w-5 h-5 text-muted-foreground" />
+          <h2 className="font-semibold text-sm" data-testid="text-manage-projects-title">Manage Projects</h2>
+        </div>
+        <Separator />
+
+        <div className="space-y-3">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Create New Project</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Input
+              placeholder="Project Name *"
+              value={newProjectName}
+              onChange={(e) => setNewProjectName(e.target.value)}
+              data-testid="input-project-name"
+            />
+            <Select value={newProjectType} onValueChange={setNewProjectType}>
+              <SelectTrigger data-testid="select-project-type">
+                <SelectValue placeholder="Project Type *" />
+              </SelectTrigger>
+              <SelectContent>
+                {projectTypes.map((pt) => (
+                  <SelectItem key={pt} value={pt} data-testid={`option-project-type-${pt}`}>
+                    {pt}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Input
+              placeholder="Close Date (DD-Mon-YYYY)"
+              value={newCloseDate}
+              onChange={(e) => setNewCloseDate(e.target.value)}
+              data-testid="input-close-date"
+            />
+            <Input
+              placeholder="Project Manager"
+              value={newProjectManager}
+              onChange={(e) => setNewProjectManager(e.target.value)}
+              data-testid="input-project-manager"
+            />
+          </div>
+          <Input
+            placeholder="Description"
+            value={newDescription}
+            onChange={(e) => setNewDescription(e.target.value)}
+            data-testid="input-project-description"
+          />
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <p className="text-xs text-muted-foreground">
+              Status defaults to "{PROJECT_STATUSES[0]}"
+            </p>
+            <Button
+              onClick={handleCreateProject}
+              disabled={!newProjectName.trim() || !newProjectType || createProjectMutation.isPending}
+              data-testid="button-create-project"
+            >
+              {createProjectMutation.isPending ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                <>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Create Project
+                </>
+              )}
+            </Button>
+          </div>
+
+          {createdProjectCode && (
+            <div className="flex items-center gap-2 p-3 rounded-md bg-chart-2/10" data-testid="text-created-project-code">
+              <CheckCircle2 className="w-4 h-4 text-chart-2" />
+              <span className="text-sm">Project created: <strong>{createdProjectCode}</strong></span>
+            </div>
+          )}
+        </div>
+
+        <Separator />
+
+        <Collapsible open={projectsOpen} onOpenChange={setProjectsOpen}>
+          <CollapsibleTrigger asChild>
+            <Button variant="ghost" className="w-full justify-start gap-2" data-testid="button-toggle-projects">
+              {projectsOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+              Existing Projects ({projects?.length ?? 0})
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="space-y-2 mt-2">
+            {projectsLoading ? (
+              <div className="flex items-center gap-2 p-3">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span className="text-sm text-muted-foreground">Loading projects...</span>
+              </div>
+            ) : projects && projects.length > 0 ? (
+              projects.map((project) => (
+                <div
+                  key={project.id}
+                  className="flex items-center justify-between gap-3 p-3 rounded-md border flex-wrap"
+                  data-testid={`card-project-${project.id}`}
+                >
+                  <div className="flex items-center gap-2 flex-wrap min-w-0">
+                    <Badge variant="secondary" className="no-default-active-elevate" data-testid={`text-project-code-${project.id}`}>
+                      {project.projectCode}
+                    </Badge>
+                    <span className="text-sm font-medium truncate" data-testid={`text-project-name-${project.id}`}>{project.name}</span>
+                    <span className="text-xs text-muted-foreground" data-testid={`text-project-type-${project.id}`}>{project.projectType}</span>
+                  </div>
+                  <Select
+                    value={project.status}
+                    onValueChange={(val) => updateStatusMutation.mutate({ id: project.id, status: val })}
+                  >
+                    <SelectTrigger className="w-auto max-w-[280px]" data-testid={`select-project-status-${project.id}`}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {PROJECT_STATUSES.map((s) => (
+                        <SelectItem key={s} value={s} data-testid={`option-status-${s}`}>
+                          {s}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ))
+            ) : (
+              <p className="text-sm text-muted-foreground p-3" data-testid="text-no-projects">No projects found.</p>
+            )}
+          </CollapsibleContent>
+        </Collapsible>
+      </Card>
 
       <Card className="p-6 space-y-4">
         <div className="flex items-center justify-between gap-4 flex-wrap">

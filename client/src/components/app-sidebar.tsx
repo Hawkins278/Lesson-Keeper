@@ -15,7 +15,7 @@
  *   avatar / name / email / role data for the footer.
  */
 import { useLocation, Link } from "wouter";
-import { Upload, LayoutDashboard, LogOut, FolderOpen, Settings, Users, UserCog, Gauge } from "lucide-react";
+import { Upload, LayoutDashboard, LogOut, FolderOpen, Settings, Users, UserCog, Gauge, BookOpen } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -61,6 +61,7 @@ function isAdmin(role?: string | null): boolean {
 const userNavItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard },
   { title: "Projects", url: "/projects", icon: FolderOpen },
+  { title: "Learning Applied", url: "/learning-applied", icon: BookOpen },
   { title: "User Settings", url: "/settings", icon: UserCog },
 ];
 

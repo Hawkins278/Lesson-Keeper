@@ -28,15 +28,25 @@ export * from "./models/auth";
 // Enum for lesson classification: positive outcome or area for improvement
 export const lessonTypeEnum = pgEnum("lesson_type", ["WentWell", "CouldHaveGoneBetter"]);
 
+// Project status values
+export const PROJECT_STATUSES = [
+  "Project to apply learning to",
+  "Live project with learning captured and learning still to be applied",
+  "Closed project with learning captured",
+] as const;
+export type ProjectStatus = typeof PROJECT_STATUSES[number];
+
 // Projects table — each uploaded Excel file creates or links to a project
 export const projects = pgTable("projects", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
-  projectType: text("project_type").notNull(),          // e.g. "IT Change", "Construction"
-  name: text("name").notNull(),                          // project display name
-  closeDate: text("close_date"),                         // stored as DD-Mon-YYYY text string
-  projectManager: text("project_manager"),               // PM name from Excel upload
-  description: text("description"),                      // free-text project description
-  createdAt: timestamp("created_at").defaultNow(),       // record creation timestamp
+  projectCode: text("project_code").unique(),             // human-readable unique ID e.g. "PRJ-001"
+  projectType: text("project_type").notNull(),            // e.g. "IT Change", "Construction"
+  name: text("name").notNull(),                           // project display name
+  closeDate: text("close_date"),                          // stored as DD-Mon-YYYY text string
+  projectManager: text("project_manager"),                // PM name from Excel upload
+  description: text("description"),                       // free-text project description
+  status: text("status").notNull().default("Project to apply learning to"),
+  createdAt: timestamp("created_at").defaultNow(),        // record creation timestamp
 });
 
 // Lesson categories — top-level groupings (e.g. Governance, Planning, Execution)
@@ -73,8 +83,17 @@ export const lessons = pgTable("lessons", {
   createdByUserId: varchar("created_by_user_id"),        // user who uploaded this lesson
 });
 
+// Learning applications — tracks which lesson subcategories are associated with projects for learning
+export const learningApplications = pgTable("learning_applications", {
+  id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+  projectId: integer("project_id").notNull().references(() => projects.id),
+  subcategoryId: integer("subcategory_id").notNull().references(() => lessonSubcategories.id),
+  appliedAt: timestamp("applied_at").defaultNow(),
+  appliedByUserId: varchar("applied_by_user_id"),
+});
+
 // Insert schemas — Zod schemas for validating new records, omitting auto-generated fields
-export const insertProjectSchema = createInsertSchema(projects).omit({ id: true, createdAt: true });
+export const insertProjectSchema = createInsertSchema(projects).omit({ id: true, createdAt: true, projectCode: true });
 export const insertLessonCategorySchema = createInsertSchema(lessonCategories).omit({ id: true });
 export const insertLessonSubcategorySchema = createInsertSchema(lessonSubcategories).omit({ id: true, firstRecordedDate: true, currentScore: true, lastScoreUpdatedAt: true });
 export const insertLessonSchema = createInsertSchema(lessons).omit({ id: true, createdAt: true });
@@ -144,3 +163,7 @@ export type ReferenceValue = typeof referenceValues.$inferSelect;
 export const insertImpactLevelSchema = createInsertSchema(impactLevels).omit({ id: true });
 export type InsertImpactLevel = z.infer<typeof insertImpactLevelSchema>;
 export type ImpactLevel = typeof impactLevels.$inferSelect;
+
+export const insertLearningApplicationSchema = createInsertSchema(learningApplications).omit({ id: true, appliedAt: true });
+export type InsertLearningApplication = z.infer<typeof insertLearningApplicationSchema>;
+export type LearningApplication = typeof learningApplications.$inferSelect;
